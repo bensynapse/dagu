@@ -265,7 +265,7 @@ func TestXlsxReleaseTwoValidation(t *testing.T) {
 		{"validation_write_cells_no_cells.yaml", "write_cells requires with.cells"},
 		{"validation_sheet_bad_operation.yaml", "move does not equal any of: [add copy rename delete]"},
 		{"validation_convert_no_output.yaml", "convert requires with.output"},
-		{"validation_bad_encoding.yaml", "latin1 does not equal any of: [utf-8 utf-8-bom shift_jis cp932]"},
+		{"validation_bad_encoding.yaml", "latin1 does not equal any of: [utf-8 utf-8-bom shift_jis cp932 windows-31j sjis ms932]"},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			t.Parallel()

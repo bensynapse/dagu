@@ -275,9 +275,15 @@ func validateCSVConfig(operation string, cfg *config) error {
 
 // validateValidateConfig checks the rules of xlsx.validate.
 func validateValidateConfig(cfg *config) error {
+	// A rule counts when it holds something, or when its value is still a
+	// reference that resolves at run time; an empty list or map checks
+	// nothing and is not a rule.
 	rules := 0
-	for _, field := range []string{"required", "not_blank", "unique", "types", "allowed"} {
-		if cfg.present[field] {
+	for field, size := range map[string]int{
+		"required": len(cfg.Required), "not_blank": len(cfg.NotBlank), "unique": len(cfg.Unique),
+		"types": len(cfg.Types), "allowed": len(cfg.Allowed),
+	} {
+		if size > 0 || cfg.deferred[field] {
 			rules++
 		}
 	}
@@ -666,7 +672,7 @@ var configSchema = &jsonschema.Schema{
 		"if_exists": {Type: "string", Enum: []any{"fail", "skip", "replace"},
 			Description: "What xlsx.sheet does when the sheet to create already exists: fail (default), skip with a warning, or replace its contents."},
 		"position": {Description: "xlsx.sheet: 1-based position of the sheet add or copy creates; by default an added sheet goes last and a copy right after its source."},
-		"encoding": {Type: "string", Enum: []any{"utf-8", "utf-8-bom", "shift_jis", "cp932"},
+		"encoding": {Type: "string", Enum: []any{"utf-8", "utf-8-bom", "shift_jis", "cp932", "windows-31j", "sjis", "ms932"},
 			Description: "Encoding of a csv file: the input of xlsx.write and xlsx.append, or the output of xlsx.convert. utf-8 (default), utf-8-bom, or shift_jis (also cp932, windows-31j)."},
 		"delimiter": {Type: "string", Description: "Field separator of a csv file, one character; a comma by default."},
 	},

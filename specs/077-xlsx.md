@@ -644,6 +644,11 @@ Start a new month from the template sheet, safe to rerun:
 
 ```yaml
 steps:
+  - id: query
+    action: postgres.query
+    with:
+      dsn: ${env.REPORTING_DSN}
+      query: select item, amount from expenses where month = '${params.MONTH}'
   - id: month
     action: xlsx.sheet
     with:
@@ -653,7 +658,7 @@ steps:
       to: ${params.MONTH}
       if_exists: skip
   - id: fill
-    depends: month
+    depends: [query, month]
     action: xlsx.write
     with:
       path: report.xlsx

@@ -166,12 +166,17 @@ func (w *file) validate(ctx context.Context, opts ValidateOptions) (*ValidateRes
 	result.Range = reg.String()
 
 	// Bind every rule to a header column; a name no header matches is a
-	// problem of its own and that rule is skipped.
+	// problem of its own, reported once however many rules name it, and
+	// those rules are skipped.
+	reported := map[string]bool{}
 	bind := func(name string) (rule, bool) {
 		column, ok := plan.alias(name)
 		if !ok {
-			add(Problem{Code: ProblemMissingColumn, Sheet: sheet, Column: name,
-				Message: fmt.Sprintf("column %q not found; headers present: %s", name, strings.Join(headers, ", "))})
+			if !reported[name] {
+				reported[name] = true
+				add(Problem{Code: ProblemMissingColumn, Sheet: sheet, Column: name,
+					Message: fmt.Sprintf("column %q not found; headers present: %s", name, strings.Join(headers, ", "))})
+			}
 			return rule{}, false
 		}
 		for i, h := range headers {

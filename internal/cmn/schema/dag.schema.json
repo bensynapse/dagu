@@ -8084,20 +8084,21 @@
           "description": "Keep a copy of the saved workbook with the run's artifacts, under xlsx/<step>/, so it is listed with the run. Enables artifact storage for the DAG."
         },
         "required": {
-          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } }, { "type": "string" }],
+          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } , "minItems": 1 }, { "type": "string" }],
           "description": "xlsx.validate: columns the header row must have."
         },
         "not_blank": {
-          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } }, { "type": "string" }],
+          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } , "minItems": 1 }, { "type": "string" }],
           "description": "xlsx.validate: columns no row may leave empty."
         },
         "unique": {
-          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } }, { "type": "string" }],
+          "oneOf": [{ "type": "array", "items": { "type": "string", "minLength": 1 } , "minItems": 1 }, { "type": "string" }],
           "description": "xlsx.validate: columns whose values may not repeat; empty cells are skipped."
         },
         "allowed": {
           "type": "object",
           "additionalProperties": { "type": "array" },
+          "minProperties": 1,
           "description": "xlsx.validate: the values each column may hold, such as {Status: [Open, Done]}; empty cells are skipped."
         },
         "on_problem": {
@@ -8159,7 +8160,7 @@
         },
         "encoding": {
           "type": "string",
-          "enum": ["utf-8", "utf-8-bom", "shift_jis", "cp932"],
+          "enum": ["utf-8", "utf-8-bom", "shift_jis", "cp932", "windows-31j", "sjis", "ms932"],
           "description": "Encoding of a csv file: the input of xlsx.write and xlsx.append, or the output of xlsx.convert. utf-8 (default), utf-8-bom, or shift_jis (also cp932)."
         },
         "delimiter": {

@@ -136,6 +136,8 @@ steps:
 		{"bad on_problem", "on_problem: fail", "on_problem: pause"},
 		{"max_problems below one", "max_problems: 50", "max_problems: 0"},
 		{"allowed value not a list", "allowed: {Status: [Open, Done]}", "allowed: {Status: Open}"},
+		{"empty required", "required: [Invoice No, Amount]", "required: []"},
+		{"empty allowed", "allowed: {Status: [Open, Done]}", "allowed: {}"},
 		{"validate without rules", "      required: [Invoice No, Amount]\n      not_blank: Status\n      unique: [Invoice No]\n      types: {Amount: number}\n      allowed: {Status: [Open, Done]}\n", ""},
 		{"cells not an object", "cells: {B2: Acme, D7: \"2026-10-01\", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: \"007\", type: string}}", "cells: [B2]"},
 		{"cell formula with a value", "Total: {formula: SUM(E2:E9)}", "Total: {formula: 1, value: 2}"},

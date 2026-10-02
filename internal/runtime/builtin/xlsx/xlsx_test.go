@@ -182,6 +182,7 @@ func TestValidation(t *testing.T) {
 		{"bad where", opRead, map[string]any{"path": "a.xlsx", "where": map[string]any{"a": map[string]any{"like": "x"}}}, `where: a: unknown operator "like"`},
 		{"unsupported op", "pivot", map[string]any{"path": "a.xlsx"}, `unsupported operation "pivot"`},
 		{"validate without rules", opValidate, map[string]any{"path": "a.xlsx"}, "validate requires at least one of with.required, with.not_blank, with.unique, with.types, or with.allowed"},
+		{"validate with empty rules", opValidate, map[string]any{"path": "a.xlsx", "required": []any{}, "types": map[string]any{}, "allowed": map[string]any{}}, "validate requires at least one of"},
 		{"bad on_problem", opValidate, map[string]any{"path": "a.xlsx", "required": "a", "on_problem": "pause"}, "on_problem must be warn or fail"},
 		{"max_problems zero", opValidate, map[string]any{"path": "a.xlsx", "required": "a", "max_problems": 0}, "max_problems must be >= 1"},
 		{"allowed not a list", opValidate, map[string]any{"path": "a.xlsx", "allowed": map[string]any{"Status": "Open"}}, "allowed.Status must be a list of values"},

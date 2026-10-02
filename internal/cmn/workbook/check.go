@@ -65,7 +65,11 @@ func Check(ctx context.Context, path string, opts CheckOptions) error {
 		return nil
 	}
 	if !loc.ok {
-		return fmt.Errorf("field 'with.%s': column %q not found; the sheet %q is empty", opts.Columns[0].Field, opts.Columns[0].Name, sheet)
+		problems := make([]error, 0, len(opts.Columns))
+		for _, c := range opts.Columns {
+			problems = append(problems, fmt.Errorf("field 'with.%s': column %q not found; the sheet %q is empty", c.Field, c.Name, sheet))
+		}
+		return errors.Join(problems...)
 	}
 	layout, err := layoutHeader(loc.reg, opts.Header)
 	if err != nil {

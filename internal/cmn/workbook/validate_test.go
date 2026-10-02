@@ -29,8 +29,8 @@ func TestValidateFindsEveryKindOfProblem(t *testing.T) {
 	path := validationBook(t)
 	result, err := Validate(context.Background(), path, ValidateOptions{
 		Required: []string{"Invoice No", "Nope"},
-		NotBlank: []string{"Invoice No", "Status"},
-		Unique:   []string{"invoice no"}, // loose match
+		NotBlank: []string{"Invoice No", "Status", "Nope"}, // Nope is reported once
+		Unique:   []string{"invoice no"},                   // loose match
 		Types:    map[string]ColumnType{"Amount": TypeNumber, "Due": TypeDate},
 		Allowed:  map[string][]any{"Status": {"Done", "Open"}},
 	})
