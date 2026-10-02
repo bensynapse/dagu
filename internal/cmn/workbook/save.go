@@ -72,36 +72,46 @@ func (w *file) save(inPlace bool) error {
 	if inPlace {
 		return classifyError(w.path, w.f.SaveAs(w.path))
 	}
-	target := w.path
-	if resolved, err := filepath.EvalSymlinks(w.path); err == nil {
+	// excelize chooses the container format from the extension, so the
+	// temporary name keeps it.
+	return replaceAtomically(w.path, filepath.Ext(w.base), func(tmp string) error {
+		return w.f.SaveAs(tmp)
+	})
+}
+
+// replaceAtomically fills a short temporary name beside target and renames
+// it over target, keeping the target's permission bits and following a
+// symbolic link so the file it points to is replaced. The temporary name
+// keeps ext, and stays short so a long name near the filesystem limit still
+// gets a valid temporary name.
+func replaceAtomically(path, ext string, fill func(tmp string) error) error {
+	target := path
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		target = resolved
 	}
 	var suffix [6]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
 		return err
 	}
-	// excelize chooses the container format from the extension, so the
-	// temporary name keeps it; the rest stays short so a long workbook name
-	// near the filesystem limit still gets a valid temporary name.
-	tmp := filepath.Join(filepath.Dir(target), ".dagu-"+hex.EncodeToString(suffix[:])+filepath.Ext(w.base))
-	if err := w.f.SaveAs(tmp); err != nil {
+	tmp := filepath.Join(filepath.Dir(target), ".dagu-"+hex.EncodeToString(suffix[:])+ext)
+	if err := fill(tmp); err != nil {
 		_ = os.Remove(tmp)
-		return classifyError(w.path, err)
+		return classifyError(path, err)
 	}
 	if info, err := os.Stat(target); err == nil {
 		_ = os.Chmod(tmp, info.Mode().Perm())
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		_ = os.Remove(tmp)
-		return classifyError(w.path, err)
+		return classifyError(path, err)
 	}
 	return nil
 }
 
 // withLock runs a whole open-modify-save sequence, retrying while the
 // workbook is held by another program and the lock options allow.
-func withLock(ctx context.Context, path string, opts LockOptions, attempt func() (*WriteResult, error)) (*WriteResult, error) {
-	var result *WriteResult
+func withLock[T any](ctx context.Context, path string, opts LockOptions, attempt func() (*T, error)) (*T, error) {
+	var result *T
 	err := withLockRetry(ctx, path, opts, func() error {
 		var err error
 		result, err = attempt()
