@@ -333,17 +333,22 @@ template is filled. `cells` maps addresses to what they receive: a cell
 such as `B2`, `Sheet1!B2`, or `'My Sheet'!B2`, or a defined name that
 refers to one cell; an address without a sheet uses `sheet`, the first
 sheet by default. A range, a named range, or a table is refused with
-`"A1:B2" is not a single cell`. A value is written as a cell value, with an
+`"A1:B2" is not a single cell`, and two addresses that name the same cell,
+such as `B3` and `$B$3`, with `"B3" and "$B$3" name the same cell Sheet1!B3`.
+A value is written as a cell value, with an
 ISO date or date-time string becoming a date; `{value: v, type: t}` pins
 the type, so `{value: "007", type: string}` stays text; `{formula: text}`
 writes a formula, with or without a leading `=`; `null` empties the cell
 and removes its formula. Every cell keeps its style, and a date written
 into a cell with no date format gains one. A cell that already holds the
-value, or the formula, is not a change.
+value, or the formula, is not a change; text and a date that read the
+same, such as the text `2026-10-01` and that date, are told apart by what
+the cell stores, so a date written over text is a change.
 
 The workbook must exist: a template fill needs a template, and `xlsx.write`
 creates workbooks. With `output`, the result is written there and the
 workbook at `path` is left as it was, so one template serves many fills;
+`output` must be a different file from `path`, a hard link included;
 the output path takes the saved file's place in `path` and `artifact`.
 `changes` reports `cells_changed`, `rows_updated` as the distinct rows a
 changed cell was on, and `sheet` and `range` as the default sheet and the
@@ -414,7 +419,9 @@ failing, when the step would fail on this host: the workbook of a reading
 or updating operation, of `write_cells`, or of a `sheet` operation other
 than `add` does not exist; the `sheet` named is not in it; a column named
 in `columns`, `types`, `where`, or a validation rule is not in the header
-row; the key or a `set` column of `update_rows` is not in the header row
+row, where a `where` key or a rule name may be an alias given in `columns`
+while the `types` of a read or convert name headers, as the run requires;
+the key or a `set` column of `update_rows` is not in the header row
 as written; or the `input` file of `write` or `append` does not exist. The
 warning names the field, as `field 'with.sheet': orders.xlsx: sheet "Nope"
 not found; sheets present: Orders`, and lists every problem found. A field

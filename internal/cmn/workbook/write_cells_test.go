@@ -131,6 +131,56 @@ func TestWriteCellsRejectsBadRequests(t *testing.T) {
 	require.ErrorContains(t, err, "cells.A1: value must be a scalar or null")
 	_, err = ParseCells(map[string]any{"A1": map[string]any{"value": []any{1}}})
 	require.ErrorContains(t, err, "cells.A1: value must be a scalar or null")
+
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for name, cells := range map[string]map[string]CellValue{
+		"absolute":     {"B3": {Value: 3}, "$B$3": {Value: 2}},
+		"defined name": {"Customer": {Value: "Acme"}, "Sheet1!B1": {Value: "Beta"}},
+	} {
+		_, err := WriteCells(context.Background(), path, WriteCellsOptions{Cells: cells})
+		require.ErrorContains(t, err, "name the same cell Sheet1!B", name)
+	}
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "a refused request writes nothing")
+}
+
+func TestWriteCellsChangesTheStoredKind(t *testing.T) {
+	t.Parallel()
+	path := templateBook(t)
+	// Text that looks like a date, written as a date, is a change: the cell
+	// reads back as the same text either way, so only the stored kind tells.
+	_, err := WriteCells(context.Background(), path, WriteCellsOptions{Cells: map[string]CellValue{"B2": {Value: "2026-10-01", Type: TypeString}}})
+	require.NoError(t, err)
+	result, err := WriteCells(context.Background(), path, WriteCellsOptions{Cells: map[string]CellValue{"B2": {Value: "2026-10-01"}}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Changes.CellsChanged, "a date over text is a change")
+	f, err := excelize.OpenFile(path)
+	require.NoError(t, err)
+	kind, err := f.GetCellType("Sheet1", "B2")
+	require.NoError(t, f.Close())
+	require.NoError(t, err)
+	assert.NotContains(t, []excelize.CellType{excelize.CellTypeSharedString, excelize.CellTypeInlineString}, kind, "the cell now holds a date")
+
+	// And text pinned over the date is a change back.
+	result, err = WriteCells(context.Background(), path, WriteCellsOptions{Cells: map[string]CellValue{"B2": {Value: "2026-10-01", Type: TypeString}}})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Changes.CellsChanged, "text over a date is a change")
+	result, err = WriteCells(context.Background(), path, WriteCellsOptions{Cells: map[string]CellValue{"B2": {Value: "2026-10-01", Type: TypeString}}})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.Changes.CellsChanged, "the same text again is not")
+}
+
+func TestWriteCellsRejectsAHardLinkedOutput(t *testing.T) {
+	t.Parallel()
+	path := templateBook(t)
+	link := filepath.Join(filepath.Dir(path), "link.xlsx")
+	if err := os.Link(path, link); err != nil {
+		t.Skipf("hard links are not supported here: %v", err)
+	}
+	_, err := WriteCells(context.Background(), path, WriteCellsOptions{Output: link, Cells: map[string]CellValue{"B1": {Value: 1}}})
+	require.ErrorContains(t, err, "output must be a different file from path")
 }
 
 func TestWriteCellsOutputLeavesTheTemplateAlone(t *testing.T) {

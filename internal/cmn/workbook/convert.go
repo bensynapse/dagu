@@ -162,10 +162,10 @@ func writeCSV(ctx context.Context, out io.Writer, rows *ReadResult, enc Encoding
 		if err := cancelled(ctx, i); err != nil {
 			return err
 		}
-		for i, name := range rows.Headers {
-			record[i] = ""
+		for j, name := range rows.Headers {
+			record[j] = ""
 			if v := row[name]; v != nil {
-				record[i] = valueString(v)
+				record[j] = valueString(v)
 			}
 		}
 		if err := cw.Write(record); err != nil {

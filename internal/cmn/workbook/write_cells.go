@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/xuri/excelize/v2"
 )
 
 // CellValue is what one cell of a WriteCells request receives: a value,
@@ -171,36 +173,29 @@ func writeCellsOnce(ctx context.Context, path string, opts WriteCellsOptions) (*
 	result.Sheet = sheet
 	result.Changes.Sheet = sheet
 
-	addresses := make([]string, 0, len(opts.Cells))
-	for addr := range opts.Cells {
-		addresses = append(addresses, addr)
+	targets, err := w.resolveCells(sheet, opts.Cells)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(addresses)
 
 	var box *region
 	changedRows := map[string]map[int]bool{}
 	// The cached grid of each touched sheet is dropped once at the end:
-	// every address names a distinct cell, so no write reads a cell the
-	// batch has already changed, and a large fill does not reload the
-	// sheet after each cell.
+	// resolveCells made sure every address names a distinct cell, so no
+	// write reads a cell the batch has already changed, and a large fill
+	// does not reload the sheet after each cell.
 	touched := map[string]bool{}
 	defer func() {
 		for name := range touched {
 			w.forget(name)
 		}
 	}()
-	for _, addr := range addresses {
+	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		reg, err := w.parseRange(sheet, addr)
-		if err != nil {
-			return nil, err
-		}
-		if reg.C1 != reg.C2 || reg.R1 != reg.R2 {
-			return nil, fmt.Errorf("%s: %q is not a single cell", w.base, addr)
-		}
-		changed, err := w.writeCell(reg.Sheet, reg.C1, reg.R1, opts.Cells[addr])
+		reg := target.region
+		changed, err := w.writeCell(reg.Sheet, reg.C1, reg.R1, opts.Cells[target.addr])
 		if err != nil {
 			return nil, err
 		}
@@ -239,6 +234,42 @@ func writeCellsOnce(ctx context.Context, path string, opts WriteCellsOptions) (*
 		return nil, err
 	}
 	return result, nil
+}
+
+// cellTarget is one address of a request and the cell it names.
+type cellTarget struct {
+	addr   string
+	region region
+}
+
+// resolveCells maps every address to its cell, in address order, and
+// refuses two addresses that name the same cell, such as B3 and $B$3 or a
+// defined name and the cell it refers to: the request would otherwise
+// write one of their values at random.
+func (w *file) resolveCells(sheet string, cells map[string]CellValue) ([]cellTarget, error) {
+	addresses := make([]string, 0, len(cells))
+	for addr := range cells {
+		addresses = append(addresses, addr)
+	}
+	sort.Strings(addresses)
+	targets := make([]cellTarget, 0, len(addresses))
+	first := map[string]string{}
+	for _, addr := range addresses {
+		reg, err := w.parseRange(sheet, addr)
+		if err != nil {
+			return nil, err
+		}
+		if reg.C1 != reg.C2 || reg.R1 != reg.R2 {
+			return nil, fmt.Errorf("%s: %q is not a single cell", w.base, addr)
+		}
+		key := reg.String()
+		if other, dup := first[key]; dup {
+			return nil, fmt.Errorf("%s: %q and %q name the same cell %s", w.base, other, addr, key)
+		}
+		first[key] = addr
+		targets = append(targets, cellTarget{addr: addr, region: reg})
+	}
+	return targets, nil
 }
 
 // writeCell gives one cell its value, formula, or nothing, and reports
@@ -286,7 +317,16 @@ func (w *file) writeCell(sheet string, col, row int, cv CellValue) (bool, error)
 		return true, nil
 	}
 	if existingFormula == "" && sameValue(existing, comparable(out)) {
-		return false, nil
+		// A date reads back as the same text a text cell holds, so the
+		// stored kind decides: a date requested over text, or text pinned
+		// over a date, is a change.
+		storedText, err := w.storedAsText(sheet, col, row)
+		if err != nil {
+			return false, err
+		}
+		if _, wantText := out.(string); wantText == storedText {
+			return false, nil
+		}
 	}
 	if err := w.setCell(sheet, col, row, out); err != nil {
 		return false, err
@@ -310,9 +350,26 @@ func comparable(out any) any {
 	return t.Format(dateTimeLayout)
 }
 
-// sameFile reports whether two paths name the same file once cleaned and
-// made absolute; a symbolic link is followed when it can be.
+// storedAsText reports whether a cell holds text rather than a number, a
+// date, or a boolean.
+func (w *file) storedAsText(sheet string, col, row int) (bool, error) {
+	kind, err := w.f.GetCellType(sheet, cellName(col, row))
+	if err != nil {
+		return false, w.cellError(sheet, col, row, err.Error())
+	}
+	return kind == excelize.CellTypeSharedString || kind == excelize.CellTypeInlineString, nil
+}
+
+// sameFile reports whether two paths name the same file. Two existing
+// paths are compared by identity, so a hard link to the workbook counts;
+// otherwise the paths are cleaned, made absolute, and symbolic links are
+// followed when they can be.
 func sameFile(a, b string) bool {
+	if ai, err := os.Stat(a); err == nil {
+		if bi, err := os.Stat(b); err == nil {
+			return os.SameFile(ai, bi)
+		}
+	}
 	resolve := func(p string) string {
 		if abs, err := filepath.Abs(p); err == nil {
 			p = abs

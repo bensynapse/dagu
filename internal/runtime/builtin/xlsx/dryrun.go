@@ -83,16 +83,18 @@ func dryRunCheck(ctx context.Context, step ir.Step) error {
 	// Columns are looked up in the header row, which only the resolved
 	// sheet, range, and header locate.
 	located := !cfg.deferred["sheet"] && !cfg.deferred["range"] && !cfg.deferred["header"]
-	add := func(field string, names ...string) {
+	// update_rows resolves its key and set columns exactly, as the run
+	// does; the reading operations accept a loose match. aliased says
+	// whether a name may be an alias given in columns, which where and the
+	// validation rules allow while the types of a read or convert, like
+	// columns itself, name headers of the sheet.
+	add := func(field string, aliased bool, names ...string) {
 		if !located {
 			return
 		}
-		// update_rows resolves its key and set columns exactly, as the run
-		// does; the reading operations accept a loose match and a name
-		// may be an alias given in columns.
 		exact := op == opUpdateRows
 		for _, name := range names {
-			if !exact {
+			if aliased {
 				name = cfg.sourceOf(name)
 			}
 			opts.Columns = append(opts.Columns, workbook.ColumnCheck{Field: field, Name: name, Exact: exact})
@@ -101,19 +103,19 @@ func dryRunCheck(ctx context.Context, step ir.Step) error {
 	switch op {
 	case opRead, opValidate, opConvert:
 		for _, sel := range cfg.columns {
-			add("columns", sel.Source)
+			add("columns", false, sel.Source)
 		}
-		add("types", sortedNames(cfg.types)...)
-		add("where", sortedNames(cfg.Where)...)
-		add("required", cfg.Required...)
-		add("not_blank", cfg.NotBlank...)
-		add("unique", cfg.Unique...)
-		add("allowed", sortedNames(cfg.allowed)...)
+		add("types", op == opValidate, sortedNames(cfg.types)...)
+		add("where", true, sortedNames(cfg.Where)...)
+		add("required", true, cfg.Required...)
+		add("not_blank", true, cfg.NotBlank...)
+		add("unique", true, cfg.Unique...)
+		add("allowed", true, sortedNames(cfg.allowed)...)
 	case opUpdateRows:
 		if key := strings.TrimSpace(cfg.Key); key != "" && key != workbook.RowNumberKey {
-			add("key", key)
+			add("key", false, key)
 		}
-		add("set", sortedNames(cfg.set)...)
+		add("set", false, sortedNames(cfg.set)...)
 	}
 	return workbook.Check(ctx, path, opts)
 }
