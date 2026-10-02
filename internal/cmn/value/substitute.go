@@ -104,6 +104,10 @@ func runCommandWithContext(ctx context.Context, cmdStr string) (string, error) {
 	commandCtx, cancel, timeout := withCommandTimeout(ctx, substituteCommandTimeout())
 	defer cancel()
 
+	// Binding arguments reach the shell after Dagu identifies the authored command.
+	protected, _ := commandCtx.Value(protectedReferencesKey{}).(map[string]string)
+	cmdStr = restoreProtectedReferences(cmdStr, protected)
+
 	var cmd *exec.Cmd
 	if shell, ok := commandSubstitutionShellFromContext(ctx); ok {
 		cmd = buildShellCommandArgsContext(commandCtx, shell, cmdStr)

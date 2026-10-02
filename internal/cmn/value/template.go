@@ -86,6 +86,8 @@ var legacyBuiltinContextAliasesByCanonical = func() map[string]string {
 
 type template struct{ source string }
 
+type protectedReferencesKey struct{}
+
 func resolveBindings(
 	ctx context.Context,
 	input string,
@@ -104,7 +106,10 @@ func resolveBindings(
 			protected[placeholder] = token
 			return placeholder, nil
 		}
-		return formatBindingValue(value), nil
+		placeholder := uniqueToken(seed, "__DAGU_RESOLVED_REF__")
+		seed += placeholder
+		protected[placeholder] = formatBindingValue(value)
+		return placeholder, nil
 	})
 	return resolved, protected, err
 }
@@ -113,10 +118,11 @@ func restoreProtectedReferences(input string, protected map[string]string) strin
 	if len(protected) == 0 {
 		return input
 	}
-	for placeholder, token := range protected {
-		input = strings.ReplaceAll(input, placeholder, token)
+	replacements := make([]string, 0, 2*len(protected))
+	for placeholder, text := range protected {
+		replacements = append(replacements, placeholder, text)
 	}
-	return input
+	return strings.NewReplacer(replacements...).Replace(input)
 }
 
 func (t template) resolveReferences(ctx context.Context, r *resolver) string {

@@ -91,6 +91,15 @@ func TestStringInsertionCoercion(t *testing.T) {
 	})
 }
 
+func TestInsertedTextStaysLiteral(t *testing.T) {
+	t.Parallel()
+
+	dagu := harness.NewRunner(t)
+	result := dagu.Run("start", "insertion_literal_text.yaml")
+	result.ExpectExitCode(0)
+	dagu.ExpectFileContent("insertion.txt", "p\\$INSERTED\n$INSERTED/data\n$INSERTED/data\nexpanded\n")
+}
+
 // TestDefectAndRuntimeOnlyNoticeClassification proves the two notice classes
 // from "Unresolved Supported References" are actually distinguished, not just
 // both labeled generically:
