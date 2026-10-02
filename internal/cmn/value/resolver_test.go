@@ -137,6 +137,8 @@ func TestResolverInsertionInDynamicFields(t *testing.T) {
 		{name: "dollar data", raw: "${params.text}", text: "$(printf executed)", want: "$(printf executed)"},
 		{name: "backtick command", raw: "`printf '%s' '${params.text}' | tr a-z A-Z`", text: "hello", want: "HELLO"},
 		{name: "dollar command", raw: "$(printf '%s' '${params.text}' | tr a-z A-Z)", text: "hello", want: "HELLO"},
+		{name: "unresolved backtick", raw: "`printf '%s' ${env.MISSING}`", want: "${env.MISSING}"},
+		{name: "unresolved dollar", raw: "$(printf '%s' ${env.MISSING})", want: "${env.MISSING}"},
 	}
 	for _, field := range fields {
 		for _, test := range tests {

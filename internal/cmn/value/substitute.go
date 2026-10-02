@@ -105,7 +105,7 @@ func runCommandWithContext(ctx context.Context, cmdStr string) (string, error) {
 	defer cancel()
 
 	// Binding arguments reach the shell after Dagu identifies the authored command.
-	protected, _ := commandCtx.Value(protectedReferencesKey{}).(map[string]string)
+	protected, _ := commandCtx.Value(resolvedReferencesKey{}).(*strings.Replacer)
 	cmdStr = restoreProtectedReferences(cmdStr, protected)
 
 	var cmd *exec.Cmd

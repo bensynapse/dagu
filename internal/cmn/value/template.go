@@ -86,7 +86,12 @@ var legacyBuiltinContextAliasesByCanonical = func() map[string]string {
 
 type template struct{ source string }
 
-type protectedReferencesKey struct{}
+type resolvedReferencesKey struct{}
+
+type protectedReferences struct {
+	all      *strings.Replacer
+	resolved *strings.Replacer
+}
 
 func resolveBindings(
 	ctx context.Context,
@@ -94,8 +99,8 @@ func resolveBindings(
 	scope RuntimeScope,
 	field string,
 	notices ValueReferenceNoticeSink,
-) (string, map[string]string, error) {
-	protected := make(map[string]string)
+) (string, protectedReferences, error) {
+	var allReplacements, resolvedReplacements []string
 	seed := input
 	resolved, err := walkBindings(input, func(token string, path string) (string, error) {
 		value, err := bindingValue(ctx, path, scope, true)
@@ -103,26 +108,34 @@ func resolveBindings(
 			addUnresolvedReferenceNotice(notices, field, token, err)
 			placeholder := uniqueToken(seed, "__DAGU_UNRESOLVED_REF__")
 			seed += placeholder
-			protected[placeholder] = token
+			allReplacements = append(allReplacements, placeholder, token)
 			return placeholder, nil
 		}
 		placeholder := uniqueToken(seed, "__DAGU_RESOLVED_REF__")
 		seed += placeholder
-		protected[placeholder] = formatBindingValue(value)
+		text := formatBindingValue(value)
+		allReplacements = append(allReplacements, placeholder, text)
+		resolvedReplacements = append(resolvedReplacements, placeholder, text)
 		return placeholder, nil
 	})
-	return resolved, protected, err
+	return resolved, protectedReferences{
+		all:      newReferenceReplacer(allReplacements),
+		resolved: newReferenceReplacer(resolvedReplacements),
+	}, err
 }
 
-func restoreProtectedReferences(input string, protected map[string]string) string {
-	if len(protected) == 0 {
+func newReferenceReplacer(replacements []string) *strings.Replacer {
+	if len(replacements) == 0 {
+		return nil
+	}
+	return strings.NewReplacer(replacements...)
+}
+
+func restoreProtectedReferences(input string, protected *strings.Replacer) string {
+	if protected == nil {
 		return input
 	}
-	replacements := make([]string, 0, 2*len(protected))
-	for placeholder, text := range protected {
-		replacements = append(replacements, placeholder, text)
-	}
-	return strings.NewReplacer(replacements...).Replace(input)
+	return protected.Replace(input)
 }
 
 func (t template) resolveReferences(ctx context.Context, r *resolver) string {

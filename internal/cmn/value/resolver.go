@@ -120,7 +120,7 @@ func (r Resolver) resolveString(ctx context.Context, raw string, field Field) (s
 	policy := policyForField(field)
 	ctx = r.withRuntimeEnv(ctx)
 	resolved := raw
-	var protected map[string]string
+	var protected protectedReferences
 	if policy.strict {
 		var err error
 		resolved, protected, err = resolveBindings(ctx, raw, r.bindingScope(), field.path, r.notices)
@@ -130,15 +130,15 @@ func (r Resolver) resolveString(ctx context.Context, raw string, field Field) (s
 			}
 			return "", err
 		}
-		if len(protected) > 0 {
-			ctx = context.WithValue(ctx, protectedReferencesKey{}, protected)
+		if protected.resolved != nil {
+			ctx = context.WithValue(ctx, resolvedReferencesKey{}, protected.resolved)
 		}
 	}
 	evaluated, err := evalString(ctx, resolved, r.optionsFor(policy)...)
 	if err != nil {
 		return "", err
 	}
-	return restoreProtectedReferences(evaluated, protected), nil
+	return restoreProtectedReferences(evaluated, protected.all), nil
 }
 
 func (r Resolver) bindingScope() RuntimeScope {
