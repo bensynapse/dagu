@@ -1118,14 +1118,18 @@ the run's artifacts; a copy that fails after the save is a warning, not a
 failed step.
 
 `xlsx.validate` checks a sheet before a workflow acts on it. `with` fields:
-`path`, `sheet`, `range`, `header`, `columns`, `trim`, and the rules
-`required` (columns the header row must have), `not_blank` (columns no row may
-leave empty), `unique` (columns whose values may not repeat), `types`
+`path`, `password`, `sheet`, `range`, `header`, `columns`, `merged`, `trim`,
+`formulas`, `max_problems` (default 1000: `count` reports every problem found
+while `problems` keeps that many), and the rules `required` (columns the
+header row must have), `not_blank` (columns no non-empty row may leave empty;
+rows whose cells are all empty are skipped), `unique` (columns whose values may not repeat), `types`
 (`{Amount: number}`), and `allowed` (`{Status: [Open, Done]}`); at least one
 rule is needed. It publishes `ok`, `problems` (each with `code`:
 `missing_column`, `blank`, `type`, `duplicate`, or `not_allowed`; `sheet`,
-`cell`, `row`, `column`, `message`), `count`, `rows`, `headers`, `sheet`,
-`range`, `warnings`, and `truncated`, and lists each problem on stderr. By
+`cell` and `row` (absent for `missing_column`), `column`, `message`), `count`
+(the number of problems), `rows` (the number of rows checked, not the rows
+themselves), `headers`, `sheet`, `range`, `warnings`, and `truncated`, and
+lists each problem on stderr. By
 default the step succeeds with the problems published (`on_problem: warn`);
 `on_problem: fail` fails it after listing them, and a failed step publishes
 nothing. To stop and ask someone, follow it with a `human.task` step whose
@@ -1138,8 +1142,8 @@ run goes on.
 `{value: v, type: t}` to pin the type, to `{formula: "=SUM(B2:B9)"}`, or to
 `null` to empty the cell. Every cell keeps its style, and a date written into
 a plain cell gains a date format. `output` writes the result to a new
-workbook and leaves `path` untouched, so one template serves many fills; the
-workbook at `path` must exist. `changes.cells_changed` counts cells that
+workbook, which must be a different file, and leaves `path` untouched, so one
+template serves many fills; the workbook at `path` must exist. `changes.cells_changed` counts cells that
 really changed. `dry_run`, `atomic`, `wait_for_unlock`, and `artifact` apply.
 
 `xlsx.sheet` takes `operation` (`add`, `copy`, `rename`, `delete`), `sheet`
@@ -1162,9 +1166,11 @@ no cap; `_row` is not. It publishes `path`, `format`, `count`, `sheet`,
 direction is `xlsx.write` with `input`, whose csv also takes `encoding` and
 `delimiter`.
 
-`dagu dry` warns, without failing, when an xlsx step's workbook, sheet, or a
-column it names does not exist, or when the `input` file of a write is
-missing; fields still holding a step-output reference are skipped.
+`dagu dry` warns, without failing, when the workbook, sheet, or a column
+named by a reading, validating, converting, updating, cell-writing, or sheet
+step does not exist, and when the `input` file of `xlsx.write` or
+`xlsx.append` is missing (those two may create their workbook, so it is not
+checked); fields still holding a step-output reference are skipped.
 
 
 ## archive.create / archive.extract / archive.list

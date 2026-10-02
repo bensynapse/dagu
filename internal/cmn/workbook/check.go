@@ -50,6 +50,9 @@ func Check(ctx context.Context, path string, opts CheckOptions) error {
 		return nil
 	}
 	defer w.close()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	sheet, err := w.resolveSheet(opts.Sheet)
 	if err != nil {
 		if _, ok := errors.AsType[*SheetNotFoundError](err); ok {
@@ -57,17 +60,32 @@ func Check(ctx context.Context, path string, opts CheckOptions) error {
 		}
 		return nil
 	}
-	if len(opts.Columns) == 0 || opts.Header.Mode == HeaderNone {
+	if strings.TrimSpace(opts.Range) == "" && (len(opts.Columns) == 0 || opts.Header.Mode == HeaderNone) {
 		return nil
 	}
 	loc, err := w.locate(sheet, opts.Range, opts.Header)
 	if err != nil {
+		// A range such as Nope!A1:B2 names its own sheet.
+		if _, ok := errors.AsType[*SheetNotFoundError](err); ok {
+			return fmt.Errorf("field 'with.range': %w", err)
+		}
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(opts.Columns) == 0 || opts.Header.Mode == HeaderNone {
 		return nil
 	}
 	if !loc.ok {
-		problems := make([]error, 0, len(opts.Columns))
+		// A read of an empty sheet succeeds with no rows, and a validation
+		// reports the columns as problems; only an operation that must
+		// find its columns, such as update_rows, fails there.
+		var problems []error
 		for _, c := range opts.Columns {
-			problems = append(problems, fmt.Errorf("field 'with.%s': column %q not found; the sheet %q is empty", c.Field, c.Name, sheet))
+			if c.Exact {
+				problems = append(problems, fmt.Errorf("field 'with.%s': column %q not found; the sheet %q is empty", c.Field, c.Name, sheet))
+			}
 		}
 		return errors.Join(problems...)
 	}

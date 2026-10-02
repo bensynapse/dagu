@@ -111,13 +111,26 @@ func TestWriteCellsFillsATemplate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, excelize.CellTypeSharedString, kind, "a pinned string stays text")
 
-	// Writing the same things again changes nothing.
+	// Writing the same things again changes nothing, dates included.
 	again, err := WriteCells(context.Background(), path, WriteCellsOptions{Cells: map[string]CellValue{
-		"Customer": {Value: "Acme"}, "B3": {Value: int64(3)}, "B5": {Formula: "B3*B4"}, "'My Sheet'!A1": {Clear: true},
+		"Customer": {Value: "Acme"}, "B2": {Value: "2026-10-01"}, "B3": {Value: int64(3)}, "B5": {Formula: "B3*B4"}, "'My Sheet'!A1": {Clear: true},
 	}})
 	require.NoError(t, err)
 	assert.Equal(t, 0, again.Changes.CellsChanged)
 	assert.Equal(t, "", again.Changes.Range)
+}
+
+func TestWriteCellsRejectsBadRequests(t *testing.T) {
+	t.Parallel()
+	path := templateBook(t)
+	_, err := WriteCells(context.Background(), path, WriteCellsOptions{Output: path, Cells: map[string]CellValue{"B1": {Value: 1}}})
+	require.ErrorContains(t, err, "output must be a different file from path")
+	_, err = WriteCells(context.Background(), path, WriteCellsOptions{Output: filepath.Join(filepath.Dir(path), ".", "template.xlsx"), Cells: map[string]CellValue{"B1": {Value: 1}}})
+	require.ErrorContains(t, err, "output must be a different file from path", "a spelling of the same path counts")
+	_, err = ParseCells(map[string]any{"A1": map[string]any{"value": map[string]any{"nested": 1}}})
+	require.ErrorContains(t, err, "cells.A1: value must be a scalar or null")
+	_, err = ParseCells(map[string]any{"A1": map[string]any{"value": []any{1}}})
+	require.ErrorContains(t, err, "cells.A1: value must be a scalar or null")
 }
 
 func TestWriteCellsOutputLeavesTheTemplateAlone(t *testing.T) {

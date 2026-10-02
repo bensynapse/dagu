@@ -297,7 +297,13 @@ func sheetLine(cfg config, result *workbook.SheetResult) string {
 	var line string
 	switch {
 	case result.Skipped:
-		line = fmt.Sprintf("Sheet %q left as it is in %s; skipped", result.Sheet, book)
+		// A source that was not found has no result name; the one asked
+		// for is what the reader recognizes.
+		name := result.Sheet
+		if name == "" {
+			name = cfg.Sheet
+		}
+		line = fmt.Sprintf("Sheet %q left as it is in %s; skipped", name, book)
 	case operation == workbook.SheetAdd:
 		line = fmt.Sprintf("Added sheet %q to %s", result.Sheet, book)
 	case operation == workbook.SheetCopy:

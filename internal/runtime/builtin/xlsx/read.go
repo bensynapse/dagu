@@ -183,7 +183,7 @@ func (e *readExecutor) validate(ctx context.Context) (outputs map[string]any, li
 		line = fmt.Sprintf("Validated %d rows in %s: %d problems", result.Rows, where, result.Count)
 	}
 	if e.cfg.OnProblem == "fail" && result.Count > 0 {
-		return nil, "", nil, problems, fmt.Errorf("%d problems found in %s %s", result.Count, workbook.Base(e.path), result.Sheet)
+		return nil, "", nil, problems, fmt.Errorf("%d %s found in %s %s", result.Count, plural(result.Count, "problem"), workbook.Base(e.path), result.Sheet)
 	}
 	outputs = map[string]any{
 		"ok":        result.OK,

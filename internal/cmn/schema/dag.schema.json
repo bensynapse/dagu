@@ -2720,6 +2720,23 @@
         },
         {
           "if": {
+            "properties": {
+              "action": { "const": "xlsx.sheet" },
+              "with": {
+                "properties": { "operation": { "enum": ["copy", "rename"] } },
+                "required": ["operation"]
+              }
+            },
+            "required": ["action", "with"]
+          },
+          "then": {
+            "properties": {
+              "with": { "required": ["to"] }
+            }
+          }
+        },
+        {
+          "if": {
             "properties": { "action": { "const": "xlsx.convert" } },
             "required": ["action"]
           },
@@ -8112,6 +8129,7 @@
         },
         "cells": {
           "type": "object",
+          "minProperties": 1,
           "additionalProperties": {
             "oneOf": [
               { "not": { "type": ["object", "array"] } },

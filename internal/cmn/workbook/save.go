@@ -142,5 +142,7 @@ func writeFileAtomic(target string, inPlace bool, write func(io.Writer) error) e
 	if inPlace {
 		return classifyError(target, fill(target))
 	}
-	return replaceAtomically(target, filepath.Ext(target), fill)
+	// A text file needs no extension on its temporary name, and a long
+	// one would push the name past what the filesystem allows.
+	return replaceAtomically(target, "", fill)
 }

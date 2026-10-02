@@ -63,7 +63,7 @@ func TestValidateOnProblemFailAndClean(t *testing.T) {
 	failing, err := newTestExecutor(t, dir, opValidate, map[string]any{"path": "orders.xlsx", "unique": []any{"Invoice No"}, "on_problem": "fail"})
 	require.NoError(t, err)
 	err = failing.exec.Run(context.Background())
-	require.ErrorContains(t, err, "1 problems found in orders.xlsx Sheet1")
+	require.ErrorContains(t, err, "1 problem found in orders.xlsx Sheet1")
 	assert.Equal(t, 1, failing.exec.ExitCode())
 	assert.Nil(t, failing.exec.GetOutputs(), "a failed attempt publishes nothing")
 	assert.Equal(t, "problem: Sheet1!A3: duplicate value \"INV-1\"; first at row 2\n", failing.stderr.String(), "the problems are still listed")

@@ -4,7 +4,7 @@ steps:
     action: xlsx.read
     with:
       path: orders.xlsx
-      columns: [amount]
+      columns: [Invoice No, Status]
   - id: mark
     depends: read
     action: xlsx.update_rows

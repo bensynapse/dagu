@@ -3,7 +3,10 @@
 
 package workbook
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"math"
+)
 
 // FitRows keeps the longest prefix of rows whose JSON encoding fits the
 // budget in bytes, and reports whether anything was dropped. A budget of
@@ -36,10 +39,12 @@ func FitJSON[T any](items []T, budget int) ([]T, bool) {
 	return items[:lo], true
 }
 
+// encodedSize is the JSON size of items; a value that cannot be encoded
+// counts as larger than any budget, so it is never reported as fitting.
 func encodedSize[T any](items []T) int {
 	data, err := json.Marshal(items)
 	if err != nil {
-		return 0
+		return math.MaxInt
 	}
 	return len(data)
 }

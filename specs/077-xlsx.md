@@ -290,7 +290,8 @@ and a `message`:
 is true when `count` is zero. `problems` keeps at most `max_problems`
 (default 1000) and is fitted to the output budget like `rows`; `truncated`
 says when either cut it. Each problem also goes to stderr as
-`problem: Sheet!Cell: message`.
+`problem: Sheet!Cell: message`, or `problem: Sheet: message` for a missing
+column, which has no cell.
 
 With `on_problem: warn`, the default, the step succeeds with the problems
 published. With `on_problem: fail` the step fails after listing them, with

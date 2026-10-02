@@ -50,26 +50,51 @@ func dryRunCheck(ctx context.Context, step ir.Step) error {
 	case opInfo, opListSheets:
 		return workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password})
 	case opSheet:
+		// Whether a source sheet is needed depends on the operation and
+		// the missing mode; while either is still a reference, only the
+		// workbook can be checked.
 		operation := strings.ToLower(strings.TrimSpace(cfg.Operation))
-		if operation == string(workbook.SheetAdd) || cfg.Missing == string(workbook.MissingSkip) || cfg.deferred["sheet"] {
+		needsSource := operation != string(workbook.SheetAdd) && cfg.Missing != string(workbook.MissingSkip)
+		if !needsSource || cfg.deferred["operation"] || cfg.deferred["missing"] || cfg.deferred["sheet"] {
 			return workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password})
 		}
 		return workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password, Sheet: cfg.Sheet})
 	case opWriteCells:
-		if cfg.deferred["sheet"] {
+		// The default sheet and every sheet an address names must exist.
+		var problems []error
+		if !cfg.deferred["sheet"] {
+			problems = append(problems, workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password, Sheet: cfg.Sheet}))
+		}
+		for _, name := range addressedSheets(cfg.cells) {
+			problems = append(problems, workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password, Sheet: name}))
+		}
+		if len(problems) == 0 {
 			return workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password})
 		}
-		return workbook.Check(ctx, path, workbook.CheckOptions{Password: cfg.Password, Sheet: cfg.Sheet})
+		return errors.Join(problems...)
 	}
-	opts := workbook.CheckOptions{Password: cfg.Password, Range: cfg.Range, Header: cfg.header}
+	opts := workbook.CheckOptions{Password: cfg.Password, Header: cfg.header}
 	if !cfg.deferred["sheet"] {
 		opts.Sheet = cfg.Sheet
 	}
+	if !cfg.deferred["range"] {
+		opts.Range = cfg.Range
+	}
+	// Columns are looked up in the header row, which only the resolved
+	// sheet, range, and header locate.
+	located := !cfg.deferred["sheet"] && !cfg.deferred["range"] && !cfg.deferred["header"]
 	add := func(field string, names ...string) {
+		if !located {
+			return
+		}
 		// update_rows resolves its key and set columns exactly, as the run
-		// does; the reading operations accept a loose match.
+		// does; the reading operations accept a loose match and a name
+		// may be an alias given in columns.
 		exact := op == opUpdateRows
 		for _, name := range names {
+			if !exact {
+				name = cfg.sourceOf(name)
+			}
 			opts.Columns = append(opts.Columns, workbook.ColumnCheck{Field: field, Name: name, Exact: exact})
 		}
 	}
@@ -91,6 +116,40 @@ func dryRunCheck(ctx context.Context, step ir.Step) error {
 		add("set", sortedNames(cfg.set)...)
 	}
 	return workbook.Check(ctx, path, opts)
+}
+
+// sourceOf maps a name a rule uses to the header it refers to when it is
+// an alias given in columns; any other name is returned as it is.
+func (cfg config) sourceOf(name string) string {
+	for _, sel := range cfg.columns {
+		if sel.As == name {
+			return sel.Source
+		}
+	}
+	return name
+}
+
+// addressedSheets lists the sheets the cell addresses name, once each and
+// in order, so a dry run can check them the way the run would.
+func addressedSheets(cells map[string]workbook.CellValue) []string {
+	seen := map[string]bool{}
+	var names []string
+	for addr := range cells {
+		i := strings.LastIndex(addr, "!")
+		if i < 0 {
+			continue
+		}
+		name := strings.TrimSpace(addr[:i])
+		if len(name) >= 2 && strings.HasPrefix(name, "'") && strings.HasSuffix(name, "'") {
+			name = strings.ReplaceAll(name[1:len(name)-1], "''", "'")
+		}
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // sortedNames returns a map's keys in order, so warnings read the same

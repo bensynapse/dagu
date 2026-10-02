@@ -144,6 +144,8 @@ steps:
 		{"cell with unknown key", "G1: {value: \"007\", type: string}", "G1: {value: \"007\", bold: true}"},
 		{"write_cells without cells", "      cells: {B2: Acme, D7: \"2026-10-01\", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: \"007\", type: string}}\n", ""},
 		{"bad operation", "operation: copy", "operation: move"},
+		{"copy without to", "      to: October\n", ""},
+		{"empty cells", "cells: {B2: Acme, D7: \"2026-10-01\", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: \"007\", type: string}}", "cells: {}"},
 		{"bad if_exists", "if_exists: skip", "if_exists: overwrite"},
 		{"position zero", "position: 2", "position: 0"},
 		{"sheet without operation", "      operation: copy\n", ""},

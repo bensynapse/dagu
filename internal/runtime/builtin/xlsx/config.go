@@ -5,10 +5,12 @@ package xlsx
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dagucloud/dagu/v2/internal/cmn/value"
 	"github.com/dagucloud/dagu/v2/internal/cmn/workbook"
@@ -261,16 +263,36 @@ func validateCSVConfig(operation string, cfg *config) error {
 		if len(runes) != 1 {
 			return fmt.Errorf("%w: delimiter must be a single character", errConfig)
 		}
+		if !validDelimiter(runes[0]) {
+			return fmt.Errorf("%w: delimiter cannot be a quote, a line break, or NUL", errConfig)
+		}
 		cfg.delimiter = runes[0]
 	}
 	if operation == opWrite || operation == opAppend {
 		for _, field := range []string{"encoding", "delimiter"} {
-			if cfg.present[field] && !cfg.present["input"] {
+			if !cfg.present[field] {
+				continue
+			}
+			if !cfg.present["input"] {
 				return fmt.Errorf("%w: %s requires with.input", errConfig, field)
+			}
+			// The input's format is the format option or its extension;
+			// only csv has an encoding or a delimiter.
+			format := strings.ToLower(strings.TrimSpace(cfg.Format))
+			if format == "" && cfg.provided("input") {
+				format = strings.TrimPrefix(strings.ToLower(filepath.Ext(cfg.Input)), ".")
+			}
+			if format != "" && format != "csv" {
+				return fmt.Errorf("%w: %s applies to csv only", errConfig, field)
 			}
 		}
 	}
 	return nil
+}
+
+// validDelimiter mirrors what encoding/csv accepts as a field separator.
+func validDelimiter(r rune) bool {
+	return r != 0 && r != '"' && r != '\r' && r != '\n' && utf8.ValidRune(r) && r != utf8.RuneError
 }
 
 // validateValidateConfig checks the rules of xlsx.validate.

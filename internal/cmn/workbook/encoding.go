@@ -4,6 +4,7 @@
 package workbook
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -51,7 +52,8 @@ func (e Encoding) charset() encoding.Encoding {
 }
 
 // decode turns file bytes in the encoding into UTF-8 and drops a leading
-// byte order mark.
+// byte order mark. UTF-8 input is returned as it is, resliced past the
+// mark, so a large file is not copied.
 func (e Encoding) decode(data []byte) ([]byte, error) {
 	if cs := e.charset(); cs != nil {
 		decoded, err := cs.NewDecoder().Bytes(data)
@@ -60,5 +62,5 @@ func (e Encoding) decode(data []byte) ([]byte, error) {
 		}
 		data = decoded
 	}
-	return []byte(strings.TrimPrefix(string(data), "\xEF\xBB\xBF")), nil
+	return bytes.TrimPrefix(data, []byte("\xEF\xBB\xBF")), nil
 }

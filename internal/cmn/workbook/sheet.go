@@ -85,6 +85,20 @@ func Sheet(ctx context.Context, path string, opts SheetOptions) (*SheetResult, e
 	if opts.Missing == "" {
 		opts.Missing = MissingFail
 	}
+	// A misspelled mode is refused before anything is opened, so it cannot
+	// pass unnoticed on a run that never reaches the branch it governs.
+	switch opts.IfExists {
+	case ExistsFail, ExistsSkip, ExistsReplace:
+	default:
+		return nil, fmt.Errorf("%s: if_exists must be fail, skip, or replace, not %q", Base(path), opts.IfExists)
+	}
+	switch opts.Missing {
+	case MissingFail, MissingSkip:
+	case MissingAppend:
+		return nil, fmt.Errorf("%s: missing must be fail or skip for a sheet operation; append applies to update_rows", Base(path))
+	default:
+		return nil, fmt.Errorf("%s: missing must be fail or skip for a sheet operation, not %q", Base(path), opts.Missing)
+	}
 	return withLock(ctx, path, opts.Lock, func() (*SheetResult, error) {
 		return sheetOnce(ctx, path, opts)
 	})

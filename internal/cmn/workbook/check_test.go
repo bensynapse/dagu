@@ -49,7 +49,12 @@ func TestCheckReportsWhatARunWouldFailOn(t *testing.T) {
 		"with header: false columns are letters and are not checked")
 
 	empty := saveBook(t, excelize.NewFile(), "empty.xlsx")
-	err = Check(context.Background(), empty, CheckOptions{Columns: []ColumnCheck{{Field: "required", Name: "a"}, {Field: "unique", Name: "b"}}})
-	require.ErrorContains(t, err, `field 'with.required': column "a" not found; the sheet "Sheet1" is empty`)
-	require.ErrorContains(t, err, `field 'with.unique': column "b" not found; the sheet "Sheet1" is empty`, "every column is reported")
+	err = Check(context.Background(), empty, CheckOptions{Columns: []ColumnCheck{{Field: "key", Name: "a", Exact: true}, {Field: "set", Name: "b", Exact: true}}})
+	require.ErrorContains(t, err, `field 'with.key': column "a" not found; the sheet "Sheet1" is empty`)
+	require.ErrorContains(t, err, `field 'with.set': column "b" not found; the sheet "Sheet1" is empty`, "every column is reported")
+	require.NoError(t, Check(context.Background(), empty, CheckOptions{Columns: []ColumnCheck{{Field: "required", Name: "a"}}}),
+		"a read of an empty sheet succeeds, so its columns are not reported")
+
+	err = Check(context.Background(), path, CheckOptions{Range: "Nope!A1:B2"})
+	require.ErrorContains(t, err, `field 'with.range': orders.xlsx: sheet "Nope" not found`)
 }

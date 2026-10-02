@@ -56,7 +56,8 @@ func TestDryRunCheckPerOperation(t *testing.T) {
 		"write missing input":     {opWrite, map[string]any{"path": "new.xlsx", "input": "rows.csv"}, "field 'with.input': rows.csv: file not found"},
 		"append present input":    {opAppend, map[string]any{"path": "new.xlsx", "input": "orders.xlsx"}, ""},
 		"write_cells sheet":       {opWriteCells, map[string]any{"path": "orders.xlsx", "sheet": "Nope", "cells": map[string]any{"A1": 1}}, "field 'with.sheet'"},
-		"write_cells ok":          {opWriteCells, map[string]any{"path": "orders.xlsx", "cells": map[string]any{"Nope!A1": 1}}, ""},
+		"write_cells ok":          {opWriteCells, map[string]any{"path": "orders.xlsx", "cells": map[string]any{"Sheet1!A1": 1, "B2": 2}}, ""},
+		"write_cells address":     {opWriteCells, map[string]any{"path": "orders.xlsx", "cells": map[string]any{"Nope!A1": 1}}, `field 'with.sheet': orders.xlsx: sheet "Nope" not found`},
 		"sheet copy source":       {opSheet, map[string]any{"path": "orders.xlsx", "operation": "copy", "sheet": "Nope", "to": "X"}, "field 'with.sheet'"},
 		"sheet copy missing skip": {opSheet, map[string]any{"path": "orders.xlsx", "operation": "copy", "sheet": "Nope", "to": "X", "missing": "skip"}, ""},
 		"sheet add":               {opSheet, map[string]any{"path": "orders.xlsx", "operation": "add", "sheet": "Nope"}, ""},
@@ -87,8 +88,22 @@ func TestDryRunCheckSkipsReferencesAndJoinsProblems(t *testing.T) {
 		"a sheet still holding a reference is skipped")
 	require.NoError(t, dryRun(t, dir, opRead, map[string]any{"path": "orders.xlsx", "strip": true}),
 		"a validation error is reported by validation, not the dry run")
+	require.NoError(t, dryRun(t, dir, opRead, map[string]any{"path": "orders.xlsx", "range": "${params.RANGE}", "columns": []any{"Nope"}}),
+		"columns are not checked until the range that locates the header row resolves")
+	require.NoError(t, dryRun(t, dir, opRead, map[string]any{"path": "orders.xlsx", "columns": []any{map[string]any{"Invoice No": "invoice"}}, "where": map[string]any{"invoice": "INV-1"}}),
+		"a where key may be an alias given in columns")
+	require.NoError(t, dryRun(t, dir, opSheet, map[string]any{"path": "orders.xlsx", "operation": "${params.OP}", "sheet": "Nope"}),
+		"whether a source sheet is needed is unknown while the operation is a reference")
+	require.NoError(t, dryRun(t, dir, opSheet, map[string]any{"path": "orders.xlsx", "operation": "delete", "sheet": "Nope", "missing": "${params.MISSING}"}),
+		"and while the missing mode is a reference")
+	err := dryRun(t, dir, opWriteCells, map[string]any{"path": "orders.xlsx", "cells": map[string]any{"Nope!A1": 1, "'Also Nope'!B2": 2}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `sheet "Also Nope" not found`)
+	assert.Contains(t, err.Error(), `sheet "Nope" not found`, "every sheet an address names is checked")
+	err = dryRun(t, dir, opRead, map[string]any{"path": "orders.xlsx", "range": "Nope!A1:B2"})
+	require.ErrorContains(t, err, `field 'with.range': orders.xlsx: sheet "Nope" not found`)
 
-	err := dryRun(t, dir, opUpdateRows, map[string]any{"path": "orders.xlsx", "key": "Nope", "rows": "[]", "set": map[string]any{"Also": "x"}})
+	err = dryRun(t, dir, opUpdateRows, map[string]any{"path": "orders.xlsx", "key": "Nope", "rows": "[]", "set": map[string]any{"Also": "x"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `field 'with.key': column "Nope" not found`)
 	assert.Contains(t, err.Error(), `field 'with.set': column "Also" not found`)

@@ -118,11 +118,11 @@ func Convert(ctx context.Context, path string, opts ConvertOptions) (*ConvertRes
 	write := func(out io.Writer) error {
 		switch format {
 		case ConvertCSV:
-			return writeCSV(out, rows, opts.Encoding, opts.Delimiter)
+			return writeCSV(ctx, out, rows, opts.Encoding, opts.Delimiter)
 		case ConvertJSON:
-			return writeJSONRows(out, rows, true)
+			return writeJSONRows(ctx, out, rows, true)
 		case ConvertJSONL:
-			return writeJSONRows(out, rows, false)
+			return writeJSONRows(ctx, out, rows, false)
 		default:
 			return fmt.Errorf("unknown format %q", format)
 		}
@@ -138,7 +138,7 @@ func Convert(ctx context.Context, path string, opts ConvertOptions) (*ConvertRes
 
 // writeCSV writes a header line and one line per row. Dates stay ISO text,
 // booleans are true and false, and empty cells are empty fields.
-func writeCSV(out io.Writer, rows *ReadResult, enc Encoding, delimiter rune) error {
+func writeCSV(ctx context.Context, out io.Writer, rows *ReadResult, enc Encoding, delimiter rune) error {
 	target := io.Writer(out)
 	if enc == EncodingUTF8BOM {
 		if _, err := out.Write([]byte("\xEF\xBB\xBF")); err != nil {
@@ -158,7 +158,10 @@ func writeCSV(out io.Writer, rows *ReadResult, enc Encoding, delimiter rune) err
 		return err
 	}
 	record := make([]string, len(rows.Headers))
-	for _, row := range rows.Rows {
+	for i, row := range rows.Rows {
+		if err := cancelled(ctx, i); err != nil {
+			return err
+		}
 		for i, name := range rows.Headers {
 			record[i] = ""
 			if v := row[name]; v != nil {
@@ -181,7 +184,7 @@ func writeCSV(out io.Writer, rows *ReadResult, enc Encoding, delimiter rune) err
 
 // writeJSONRows writes the rows as objects whose keys follow the header
 // order: one array for JSON, one object per line for JSONL.
-func writeJSONRows(out io.Writer, rows *ReadResult, array bool) error {
+func writeJSONRows(ctx context.Context, out io.Writer, rows *ReadResult, array bool) error {
 	bw := bufio.NewWriter(out)
 	if array {
 		if _, err := bw.WriteString("[\n"); err != nil {
@@ -197,6 +200,9 @@ func writeJSONRows(out io.Writer, rows *ReadResult, array bool) error {
 		keys[i] = key
 	}
 	for i, row := range rows.Rows {
+		if err := cancelled(ctx, i); err != nil {
+			return err
+		}
 		if array && i > 0 {
 			if _, err := bw.WriteString(",\n"); err != nil {
 				return err
@@ -235,4 +241,14 @@ func writeJSONRows(out io.Writer, rows *ReadResult, array bool) error {
 		}
 	}
 	return bw.Flush()
+}
+
+// cancelled reports the context's error every few hundred rows, so a long
+// export stops soon after the run is cancelled without paying for a check
+// on every row.
+func cancelled(ctx context.Context, row int) error {
+	if row%256 == 0 {
+		return ctx.Err()
+	}
+	return nil
 }

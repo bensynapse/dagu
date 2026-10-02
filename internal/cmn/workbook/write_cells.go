@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -74,6 +75,10 @@ func parseCellValue(spec any) (CellValue, error) {
 		if !hasValue || len(x) > 2 {
 			return CellValue{}, fmt.Errorf("use a scalar, null, {value: v, type: t}, or {formula: text}")
 		}
+		switch value.(type) {
+		case map[string]any, []any:
+			return CellValue{}, fmt.Errorf("value must be a scalar or null")
+		}
 		cv := CellValue{Value: normalizeScalar(value), Clear: value == nil}
 		if typeSpec, hasType := x["type"]; hasType {
 			text, isText := typeSpec.(string)
@@ -139,6 +144,9 @@ func writeCellsOnce(ctx context.Context, path string, opts WriteCellsOptions) (*
 		if err := CheckExtension(opts.Output); err != nil {
 			return nil, fmt.Errorf("output: %w", err)
 		}
+		if sameFile(path, opts.Output) {
+			return nil, fmt.Errorf("%s: output must be a different file from path; leave output out to fill the workbook in place", Base(path))
+		}
 		if _, statErr := os.Stat(opts.Output); statErr == nil {
 			warning, err := checkLockFile(opts.Output)
 			if err != nil {
@@ -171,6 +179,16 @@ func writeCellsOnce(ctx context.Context, path string, opts WriteCellsOptions) (*
 
 	var box *region
 	changedRows := map[string]map[int]bool{}
+	// The cached grid of each touched sheet is dropped once at the end:
+	// every address names a distinct cell, so no write reads a cell the
+	// batch has already changed, and a large fill does not reload the
+	// sheet after each cell.
+	touched := map[string]bool{}
+	defer func() {
+		for name := range touched {
+			w.forget(name)
+		}
+	}()
 	for _, addr := range addresses {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -189,7 +207,7 @@ func writeCellsOnce(ctx context.Context, path string, opts WriteCellsOptions) (*
 		if !changed {
 			continue
 		}
-		w.forget(reg.Sheet)
+		touched[reg.Sheet] = true
 		if changedRows[reg.Sheet] == nil {
 			changedRows[reg.Sheet] = map[int]bool{}
 		}
@@ -267,7 +285,7 @@ func (w *file) writeCell(sheet string, col, row int, cv CellValue) (bool, error)
 		}
 		return true, nil
 	}
-	if existingFormula == "" && sameValue(existing, out) {
+	if existingFormula == "" && sameValue(existing, comparable(out)) {
 		return false, nil
 	}
 	if err := w.setCell(sheet, col, row, out); err != nil {
@@ -275,4 +293,34 @@ func (w *file) writeCell(sheet string, col, row int, cv CellValue) (bool, error)
 	}
 	w.styleWrittenCell(sheet, col, row, w.styleAt(sheet, col, row), out, cv.Type)
 	return true, nil
+}
+
+// comparable turns a value about to be written into the form a read of the
+// cell would return, so a date written twice is not a change the second
+// time: a read yields an ISO string for a date cell, while the writer holds
+// a time.
+func comparable(out any) any {
+	t, ok := out.(time.Time)
+	if !ok {
+		return out
+	}
+	if t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 {
+		return t.Format(dateLayout)
+	}
+	return t.Format(dateTimeLayout)
+}
+
+// sameFile reports whether two paths name the same file once cleaned and
+// made absolute; a symbolic link is followed when it can be.
+func sameFile(a, b string) bool {
+	resolve := func(p string) string {
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+		return filepath.Clean(p)
+	}
+	return resolve(a) == resolve(b)
 }
