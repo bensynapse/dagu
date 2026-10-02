@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -121,4 +122,25 @@ func withLock[T any](ctx context.Context, path string, opts LockOptions, attempt
 		return nil, err
 	}
 	return result, nil
+}
+
+// writeFileAtomic writes a file through write. With inPlace the target is
+// written directly; otherwise write fills a temporary file in the target's
+// directory that is renamed over the target the way save does.
+func writeFileAtomic(target string, inPlace bool, write func(io.Writer) error) error {
+	fill := func(name string) error {
+		f, err := os.Create(name) //nolint:gosec // the path is the output file the step names
+		if err != nil {
+			return err
+		}
+		if err := write(f); err != nil {
+			_ = f.Close()
+			return err
+		}
+		return f.Close()
+	}
+	if inPlace {
+		return classifyError(target, fill(target))
+	}
+	return replaceAtomically(target, filepath.Ext(target), fill)
 }

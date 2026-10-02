@@ -292,24 +292,24 @@ func TestDecodeRowsAndLoadTable(t *testing.T) {
 	dir := t.TempDir()
 	csvPath := filepath.Join(dir, "in.csv")
 	require.NoError(t, os.WriteFile(csvPath, []byte("\xEF\xBB\xBFid,name\n1,\"a, b\"\n2,c\n"), 0o600))
-	table, err = LoadTable(csvPath, "", nil)
+	table, err = LoadTable(csvPath, LoadOptions{Format: "", Columns: nil})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"id", "name"}, table.Columns)
 	assert.Equal(t, [][]any{{"1", "a, b"}, {"2", "c"}}, table.Rows)
 
 	jsonlPath := filepath.Join(dir, "in.jsonl")
 	require.NoError(t, os.WriteFile(jsonlPath, []byte("{\"id\": 1}\n\n{\"id\": 2}\n"), 0o600))
-	table, err = LoadTable(jsonlPath, "", nil)
+	table, err = LoadTable(jsonlPath, LoadOptions{Format: "", Columns: nil})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"id"}, table.Columns)
 	assert.Len(t, table.Rows, 2)
 
 	jsonPath := filepath.Join(dir, "in.txt")
 	require.NoError(t, os.WriteFile(jsonPath, []byte(`[{"id": 1}]`), 0o600))
-	table, err = LoadTable(jsonPath, "json", nil)
+	table, err = LoadTable(jsonPath, LoadOptions{Format: "json", Columns: nil})
 	require.NoError(t, err)
 	assert.Len(t, table.Rows, 1)
-	_, err = LoadTable(jsonPath, "", nil)
+	_, err = LoadTable(jsonPath, LoadOptions{Format: "", Columns: nil})
 	require.ErrorContains(t, err, `input format "txt" is not json, jsonl, or csv`)
 
 	rows := []Row{{"a": 1, "b": 2, RowNumberKey: 5}}

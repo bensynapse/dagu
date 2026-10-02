@@ -184,19 +184,39 @@ func arraysToTable(list []any, order []string) (Table, error) {
 	return Table{Columns: order, Rows: rows}, nil
 }
 
-// LoadTable reads rows from a json, jsonl, or csv file. An empty format is
-// taken from the extension. CSV files may start with a UTF-8 byte order
-// mark; their first line is the header.
-func LoadTable(path, format string, columns any) (Table, error) {
-	format = strings.ToLower(strings.TrimSpace(format))
+// LoadOptions says how LoadTable reads a file.
+type LoadOptions struct {
+	// Format is json, jsonl, or csv; empty takes it from the extension.
+	Format string
+	// Columns selects and orders the fields, as for DecodeRows.
+	Columns any
+	// Encoding is the CSV file's encoding; empty means UTF-8, and a byte
+	// order mark is dropped either way.
+	Encoding Encoding
+	// Delimiter is the CSV field separator; zero means a comma.
+	Delimiter rune
+}
+
+// LoadTable reads rows from a json, jsonl, or csv file. A CSV file's first
+// line is the header.
+func LoadTable(path string, opts LoadOptions) (Table, error) {
+	format := strings.ToLower(strings.TrimSpace(opts.Format))
 	if format == "" {
 		format = strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // the path is the input file the step names
+	columns := opts.Columns
+	raw, err := os.ReadFile(path) //nolint:gosec // the path is the input file the step names
 	if err != nil {
 		return Table{}, fmt.Errorf("input: %w", err)
 	}
-	data = []byte(strings.TrimPrefix(string(data), "\xEF\xBB\xBF"))
+	encoding := opts.Encoding
+	if format != "csv" {
+		encoding = EncodingUTF8
+	}
+	data, err := encoding.decode(raw)
+	if err != nil {
+		return Table{}, fmt.Errorf("input: %w", err)
+	}
 	switch format {
 	case "json":
 		return DecodeRows(string(data), columns)
@@ -221,16 +241,19 @@ func LoadTable(path, format string, columns any) (Table, error) {
 		}
 		return DecodeRows("["+strings.Join(objects, ",")+"]", columns)
 	case "csv":
-		return csvToTable(strings.NewReader(string(data)), columns)
+		return csvToTable(strings.NewReader(string(data)), columns, opts.Delimiter)
 	default:
 		return Table{}, fmt.Errorf("input format %q is not json, jsonl, or csv", format)
 	}
 }
 
-func csvToTable(r io.Reader, columns any) (Table, error) {
+func csvToTable(r io.Reader, columns any, delimiter rune) (Table, error) {
 	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
 	reader.LazyQuotes = true
+	if delimiter != 0 {
+		reader.Comma = delimiter
+	}
 	records, err := reader.ReadAll()
 	if err != nil {
 		return Table{}, fmt.Errorf("input: %w", err)

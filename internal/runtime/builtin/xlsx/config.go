@@ -55,7 +55,10 @@ type config struct {
 	types   map[string]workbook.ColumnType
 	set     map[string]workbook.SetValue
 	wait    time.Duration
-	present map[string]bool
+	// encoding and delimiter apply to a CSV input file.
+	encoding  workbook.Encoding
+	delimiter rune
+	present   map[string]bool
 	// deferred lists fields whose value is still a reference at build time.
 	deferred map[string]bool
 }

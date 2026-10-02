@@ -94,7 +94,7 @@ func sheetOnce(ctx context.Context, path string, opts SheetOptions) (*SheetResul
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	result := &SheetResult{WriteResult: WriteResult{Path: path, DryRun: opts.DryRun, Warnings: []string{}}, Sheets: []string{}}
+	result := &SheetResult{Path: path, DryRun: opts.DryRun, Warnings: []string{}, Sheets: []string{}}
 	warn := func(msg string) { result.Warnings = append(result.Warnings, msg) }
 	warning, err := checkLockFile(path)
 	if err != nil {
@@ -153,8 +153,7 @@ func (op *sheetOp) existing(name string) (string, bool, error) {
 	if err == nil {
 		return sheet, true, nil
 	}
-	var missing *SheetNotFoundError
-	if errors.As(err, &missing) {
+	if _, ok := errors.AsType[*SheetNotFoundError](err); ok {
 		return "", false, nil
 	}
 	return "", false, err

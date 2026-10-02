@@ -168,7 +168,7 @@ func (e *writeExecutor) loadTable() (workbook.Table, error) {
 	if err != nil {
 		return workbook.Table{}, err
 	}
-	table, err := workbook.LoadTable(input, e.cfg.Format, e.cfg.Columns)
+	table, err := workbook.LoadTable(input, workbook.LoadOptions{Format: e.cfg.Format, Columns: e.cfg.Columns, Encoding: e.cfg.encoding, Delimiter: e.cfg.delimiter})
 	if err != nil {
 		return workbook.Table{}, fmt.Errorf("%w: %v", errConfig, err)
 	}
