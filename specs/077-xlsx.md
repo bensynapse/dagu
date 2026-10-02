@@ -2,31 +2,35 @@
 
 ## Status
 
-Partially implemented.
+Implemented.
 
 Conformance covers writing and reading a workbook through the CLI: typing,
 range and header options, table detection, limits, append, update_rows with
 its shape checks, dry run, sheet preservation, type errors, validation
-errors, the unsupported `.xls` format, and the lock file. Formula
-evaluation, merged cells, named ranges, tables, custom number formats, the
-1904 date system, Windows sharing violations, and `wait_for_unlock` timing
-belong to unit tests of `internal/cmn/workbook`.
-
-Not implemented: `xlsx.validate`, `xlsx.write_cells`, `xlsx.convert`,
-`xlsx.sheet`, streaming writers, and `dagu dry` checks for xlsx steps.
+errors, the unsupported `.xls` format, the lock file, validate with every
+problem kind and `on_problem: fail`, the human task that follows a
+validation, write_cells into a workbook and into a copy, sheet operations
+with their skip modes, convert to csv, json, and jsonl with Shift_JIS, a
+Shift_JIS input file, and the `dagu dry` checks. Formula evaluation, merged
+cells, named ranges, tables, custom number formats, the 1904 date system,
+Windows sharing violations, and `wait_for_unlock` timing belong to unit
+tests of `internal/cmn/workbook`.
 
 ## Scope
 
 This spec defines the `xlsx.read`, `xlsx.info`, `xlsx.list_sheets`,
-`xlsx.write`, `xlsx.append`, and `xlsx.update_rows` actions, the
-`dagu xlsx inspect` and `dagu xlsx read` commands, and the MCP `workbook`
-read target. It covers configuration, validation, how cells become values,
-how values become cells, published outputs, change summaries, atomic saves,
-and locked workbooks.
+`xlsx.write`, `xlsx.append`, `xlsx.update_rows`, `xlsx.validate`,
+`xlsx.write_cells`, `xlsx.sheet`, and `xlsx.convert` actions, the
+`dagu xlsx inspect` and `dagu xlsx read` commands, the MCP `workbook` read
+target, and the checks `dagu dry` runs for xlsx steps. It covers
+configuration, validation, how cells become values, how values become
+cells, published outputs, change summaries, atomic saves, and locked
+workbooks.
 
 Out of scope: driving a spreadsheet application, the `.xls` and `.ods`
-formats, macros, charts, images, pivot tables, conditional formatting, data
-validation rules, Google Sheets, and file locking on synced folders. Charts,
+formats, macros, charts, images, pivot tables, conditional formatting, the
+workbook's own data validation rules, Google Sheets, file locking on synced
+folders, and streaming writes for sheets beyond what memory holds. Charts,
 images, and formatting the actions do not touch are preserved on save.
 
 ## Goal
@@ -48,10 +52,15 @@ changed shape under the workflow is refused rather than written to.
 | `xlsx.write` | Create a workbook or write a sheet from rows. | `path`, `sheet`, `changes`, `dry_run`, `warnings`, `artifact` |
 | `xlsx.append` | Add rows below the last used row. | Same as `xlsx.write` |
 | `xlsx.update_rows` | Write columns back to rows selected by key or `_row`. | Same as `xlsx.write` |
+| `xlsx.validate` | Check rows against rules and publish every problem. | `ok`, `problems`, `count`, `rows`, `headers`, `sheet`, `range`, `warnings`, `truncated` |
+| `xlsx.write_cells` | Fill named cells of a workbook or of a copy. | Same as `xlsx.write` |
+| `xlsx.sheet` | Add, copy, rename, or delete a sheet. | Same as `xlsx.write`, plus `sheets` |
+| `xlsx.convert` | Export a sheet to csv, json, or jsonl. | `path`, `format`, `count`, `sheet`, `range`, `warnings`, `artifact` |
 
 Outputs are fixed: declaring `output`, `outputs`, or `stdout.outputs` on an
 xlsx step is rejected at validation. The executor writes one line to stdout
-and one `warning:` line per warning to stderr.
+and one `warning:` line per warning to stderr; `xlsx.validate` also writes
+one `problem:` line per problem.
 
 Only `.xlsx` and `.xlsm` paths are accepted. `path` resolves like the file
 actions: absolute and `~` paths as written, relative paths against the step
@@ -253,6 +262,165 @@ process can read, and returns the `inspect` description with five sample
 rows per sheet. The path is recorded in the audit log as `workbook_path`.
 Spec 021 defines the target's fields and errors.
 
+### Validating
+
+`xlsx.validate` reads a sheet the way `xlsx.read` does (`sheet`, `range`,
+`header`, `columns`, `merged`, `trim`, `formulas`) and checks every
+non-empty row against rules: `required` lists columns the header row must
+have, `not_blank` columns no row may leave empty, `unique` columns whose
+values may not repeat, `types` columns whose cells must convert, and
+`allowed` the values a column's cells may hold. Names in the rules match a
+header exactly, loosely (ignoring case and surrounding space), or through a
+`columns` alias. `unique` and `allowed` skip empty cells; `not_blank` is
+the rule for those. At least one rule is required.
+
+Every failed check is one problem with a `code`, the `sheet`, the `cell`
+and `row` (absent for a missing column), the `column` as the header reads,
+and a `message`:
+
+| Code | Problem |
+| --- | --- |
+| `missing_column` | A rule names a column the header row does not have; that rule is skipped. |
+| `blank` | A `not_blank` column is empty: `Status is blank`. |
+| `type` | A cell cannot convert to its column's type: `expected number, found "N/A"`. |
+| `duplicate` | A `unique` value seen before: `duplicate value "INV-1"; first at row 5`. |
+| `not_allowed` | A value outside the allowed list: `value "Pending" is not one of Done, Open`. |
+
+`count` is every problem found, `rows` the non-empty rows checked, and `ok`
+is true when `count` is zero. `problems` keeps at most `max_problems`
+(default 1000) and is fitted to the output budget like `rows`; `truncated`
+says when either cut it. Each problem also goes to stderr as
+`problem: Sheet!Cell: message`.
+
+With `on_problem: warn`, the default, the step succeeds with the problems
+published. With `on_problem: fail` the step fails after listing them, with
+`N problems found in <workbook> <sheet>`; a failed step publishes no
+outputs (Spec 012), so a workflow that must act on the problems keeps the
+default.
+
+To stop and ask someone when a workbook has problems, follow the
+validation with a `human.task` step whose precondition is the count, and
+let the rest of the workflow continue past a skipped task:
+
+```yaml
+  - id: check
+    action: xlsx.validate
+    with:
+      path: orders.xlsx
+      required: [Invoice No, Amount]
+      allowed: {Status: [Open, Done]}
+  - id: review
+    depends: check
+    action: human.task
+    preconditions:
+      - condition: "${steps.check.outputs.count}"
+        expected: "num:>0"
+    continue_on:
+      skipped: true
+    with:
+      prompt: Fix the problems in orders.xlsx and continue
+```
+
+With no problems the task is skipped and the run goes on; with problems
+the run waits for the task to be completed (Spec 031) and continues from
+there.
+
+### Writing cells
+
+`xlsx.write_cells` fills named cells of an existing workbook, the way a
+template is filled. `cells` maps addresses to what they receive: a cell
+such as `B2`, `Sheet1!B2`, or `'My Sheet'!B2`, or a defined name that
+refers to one cell; an address without a sheet uses `sheet`, the first
+sheet by default. A range, a named range, or a table is refused with
+`"A1:B2" is not a single cell`. A value is written as a cell value, with an
+ISO date or date-time string becoming a date; `{value: v, type: t}` pins
+the type, so `{value: "007", type: string}` stays text; `{formula: text}`
+writes a formula, with or without a leading `=`; `null` empties the cell
+and removes its formula. Every cell keeps its style, and a date written
+into a cell with no date format gains one. A cell that already holds the
+value, or the formula, is not a change.
+
+The workbook must exist: a template fill needs a template, and `xlsx.write`
+creates workbooks. With `output`, the result is written there and the
+workbook at `path` is left as it was, so one template serves many fills;
+the output path takes the saved file's place in `path` and `artifact`.
+`changes` reports `cells_changed`, `rows_updated` as the distinct rows a
+changed cell was on, and `sheet` and `range` as the default sheet and the
+bounding box of the cells changed on it. `dry_run`, `atomic`,
+`wait_for_unlock`, and `artifact` apply as for `xlsx.write`.
+
+### Sheets
+
+`xlsx.sheet` runs one `operation` on a workbook that must exist: `add`
+creates the sheet named `sheet`; `copy` duplicates `sheet` as `to`;
+`rename` gives `sheet` the name `to`; `delete` removes `sheet`. `position`
+places a sheet `add` or `copy` creates, 1-based; by default an added sheet
+goes last and a copy right after its source.
+
+A rerun must be safe, so the modes say what happens when the workbook is
+not as expected. `if_exists` applies to the sheet `add`, `copy`, and
+`rename` would create: `fail` (default) with `sheet "October" already
+exists`, `skip` with a warning and nothing changed, or `replace`, which
+empties an added sheet in place, copies over the existing sheet keeping its
+position, or drops the sheet in a rename's way. `missing` applies to the
+sheet `copy`, `rename`, and `delete` start from: `fail` (default) or `skip`
+with a warning. Deleting the only sheet fails with `cannot delete the only
+sheet "Sheet1"`. A rename to the same name, or one that only changes case,
+is accepted.
+
+The outputs are those of a writer plus `sheets`, the sheet names
+afterwards; `sheet` is the sheet the operation produced or removed. The
+underlying library sets three limits, stated here so a workflow can plan
+for them: a rename does not rewrite formulas on other sheets that name the
+sheet, though defined names follow it; a delete leaves such references
+dangling and drops the names scoped to the sheet; and a copy carries
+cells, styles, widths, merged regions, and validations but not tables,
+images, charts, or page setup.
+
+### Converting
+
+`xlsx.convert` writes the rows of a sheet to the file named by `output`,
+as `csv`, `json`, or `jsonl` by the file's extension (`.ndjson` counts as
+jsonl) or by `format`. It reads the way `xlsx.read` does (`sheet`,
+`range`, `header`, `columns`, `types`, `trim`, `merged`, `formulas`) but
+with every row and no output budget, since the rows go to a file, and a
+cell that fails a pinned type fails the step. Columns follow the header
+order, or `columns`, and the `_row` field is not written: the file is a
+table. CSV cells are text as a reader would show them, with dates in ISO
+form and booleans as `true` and `false`; JSON keeps the typed values. The
+file is written through a temporary file in its directory and renamed into
+place unless `atomic: false`.
+
+CSV takes `encoding`: `utf-8` (default, no byte order mark), `utf-8-bom`
+for Excel to open the file as UTF-8 by double click, or `shift_jis` as
+Windows uses it (code page 932, Windows-31J; `cp932`, `windows-31j`,
+`sjis`, and `ms932` are accepted spellings), and `delimiter`, one
+character, a comma by default. The outputs are `path`, `format`, `count`,
+`sheet`, `range`, `warnings`, and with `artifact: true` the file's copy.
+The other direction, a csv, json, or jsonl file into a workbook, is
+`xlsx.write` with `input`.
+
+### Input encoding
+
+The `input` file of `xlsx.write` and `xlsx.append` takes the same
+`encoding` and `delimiter` when it is csv; a byte order mark is dropped
+either way. Both fields require `input`.
+
+### Dry-run checks
+
+`dagu dry` (Spec 064) runs a check for every xlsx step and warns, without
+failing, when the step would fail on this host: the workbook of a reading
+or updating operation, of `write_cells`, or of a `sheet` operation other
+than `add` does not exist; the `sheet` named is not in it; a column named
+in `columns`, `types`, `where`, or a validation rule is not in the header
+row; the key or a `set` column of `update_rows` is not in the header row
+as written; or the `input` file of `write` or `append` does not exist. The
+warning names the field, as `field 'with.sheet': orders.xlsx: sheet "Nope"
+not found; sheets present: Orders`, and lists every problem found. A field
+whose value still holds a reference to a step output is skipped, since no
+step has run; params and environment resolve. A workbook the check cannot
+open, such as one another program holds, is left to the run.
+
 ## Errors
 
 ### Validation
@@ -276,6 +444,33 @@ Every one of these is rejected by `dagu validate`:
   `in`; `set` values that are neither a field name nor `{value: literal}`;
   `missing: skip` or `append` with `key: _row`; `wait_for_unlock` that is
   not a duration.
+- `xlsx.validate` with no rule: `validate requires at least one of
+  with.required, with.not_blank, with.unique, with.types, or with.allowed`;
+  `on_problem` outside `warn` and `fail`: `on_problem must be warn or fail`;
+  `max_problems` below 1; an `allowed` value that is not a list:
+  `allowed.Status must be a list of values`.
+- `xlsx.write_cells` without `cells`: `write_cells requires with.cells`;
+  empty `cells`: `cells must not be empty`; a cell value of another shape:
+  `cells.B2: use a scalar, null, {value: v, type: t}, or {formula: text}`;
+  an empty formula: `cells.B2: formula must not be empty`; an `output`
+  that is not a workbook: `output: out.csv: only .xlsx and .xlsm workbooks
+  are supported; save as .xlsx`.
+- `xlsx.sheet` without `operation` or `sheet`: `operation is required for
+  sheet`, `sheet is required for sheet`; an `operation` outside the four;
+  `copy` or `rename` without `to`: `to is required for copy`; `to`,
+  `if_exists`, `missing`, or `position` on an operation that does not take
+  it: `to is only valid for copy and rename`, `if_exists is only valid for
+  add, copy, and rename`, `missing is only valid for copy, rename, and
+  delete`, `position is only valid for add and copy`; `position` below 1.
+- `xlsx.convert` without `output`: `convert requires with.output`; an
+  output whose extension names no format and no `format`: `output
+  extension ".txt" is not json, jsonl, or csv; set format`; `encoding` or
+  `delimiter` with a format other than csv: `encoding applies to csv only`.
+- `encoding` outside `utf-8`, `utf-8-bom`, and `shift_jis` and its
+  spellings: `encoding must be utf-8, utf-8-bom, or shift_jis`; a
+  `delimiter` that is not one character: `delimiter must be a single
+  character`; either on `xlsx.write` or `xlsx.append` without `input`:
+  `encoding requires with.input`.
 
 ### Runtime
 
@@ -302,6 +497,19 @@ Every one of these is rejected by `dagu validate`:
   `orders.xlsx is open in another program; close it and retry`.
 - `artifact: true` in a DAG whose artifacts are disabled:
   `artifact requires artifact storage`.
+- `xlsx.validate` with `on_problem: fail` and any problem:
+  `2 problems found in orders.xlsx Orders`.
+- A `write_cells` address that is not one cell: `template.xlsx: "A1:B2" is
+  not a single cell`; a workbook to fill that does not exist:
+  `template.xlsx: workbook not found`.
+- A sheet to create that exists, with `if_exists: fail`:
+  `report.xlsx: sheet "October" already exists`; a copy onto its own
+  source: `sheet "Template" cannot be copied onto itself`; a `position`
+  past the end: `position 5 is outside 1 to 4`; deleting the last sheet:
+  `report.xlsx: cannot delete the only sheet "Sheet1"`; a name Excel
+  refuses: `invalid sheet name "Bad:Name"`.
+- A `convert` output that cannot be written, such as into a directory that
+  does not exist: `out.csv: <system error>`.
 
 Errors that concern a cell name the workbook, sheet, and cell as
 `<workbook> <sheet>!<cell>: <message>`.
@@ -314,6 +522,9 @@ Errors that concern a cell name the workbook, sheet, and cell as
 - Artifacts: [Spec 051](051-artifact.md)
 - File actions, whose path handling the xlsx actions share: [Spec 052](052-file.md)
 - Mailbox actions, whose output budget and attachment storage the xlsx actions mirror: [Spec 073](073-mailbox-actions.md)
+- Preconditions, which gate the human task after a validation: [Spec 023](023-preconditions.md)
+- Human tasks, which a validation hands its problems to: [Spec 031](031-human-task.md)
+- Dry-run step checks, which the xlsx actions register with: [Spec 064](064-dry-run-step-checks.md)
 
 ## Examples
 
@@ -402,4 +613,65 @@ steps:
     with:
       path: log.xlsx
       rows: ${params.ROWS}
+```
+
+Fill an invoice template for each order and keep the copies with the run:
+
+```yaml
+steps:
+  - id: orders
+    action: xlsx.read
+    with:
+      path: orders.xlsx
+      columns: [{Invoice No: invoice}, {Customer: customer}, {Amount: amount}]
+  - id: each
+    depends: orders
+    foreach: ${steps.orders.outputs.rows}
+    steps:
+      - id: fill
+        action: xlsx.write_cells
+        with:
+          path: templates/invoice.xlsx
+          output: out/invoice-${item.invoice}.xlsx
+          cells:
+            Customer: ${item.customer}
+            B7: ${item.amount}
+            B9: {formula: "=B7*1.1"}
+          artifact: true
+```
+
+Start a new month from the template sheet, safe to rerun:
+
+```yaml
+steps:
+  - id: month
+    action: xlsx.sheet
+    with:
+      path: report.xlsx
+      operation: copy
+      sheet: Template
+      to: ${params.MONTH}
+      if_exists: skip
+  - id: fill
+    depends: month
+    action: xlsx.write
+    with:
+      path: report.xlsx
+      sheet: ${params.MONTH}
+      mode: append
+      rows: ${steps.query.outputs.rows}
+```
+
+Export a sheet for a system that reads Shift_JIS CSV:
+
+```yaml
+steps:
+  - id: export
+    action: xlsx.convert
+    with:
+      path: orders.xlsx
+      sheet: Orders
+      output: out/orders.csv
+      encoding: shift_jis
+      columns: [品名, 数量, 金額]
 ```

@@ -788,7 +788,7 @@ first, each with `id`, `message_id`, `folder`, `from_name`, `from_address`, `to`
 mark it read inside the loop right after its work, so a failed email stays
 unread for the next run.
 
-## xlsx.read / xlsx.info / xlsx.list_sheets / xlsx.write / xlsx.append / xlsx.update_rows
+## xlsx.read / xlsx.info / xlsx.list_sheets / xlsx.write / xlsx.append / xlsx.update_rows / xlsx.validate / xlsx.write_cells / xlsx.sheet / xlsx.convert
 
 Read and write `.xlsx` workbooks without a spreadsheet application, on any
 platform. The pattern a per-row job needs is: read the rows still to do, act on
@@ -895,6 +895,56 @@ nobody holds is only a warning; `wait_for_unlock: 5m` retries with backoff
 instead of failing. `artifact: true` keeps a copy of the saved workbook with
 the run's artifacts; a copy that fails after the save is a warning, not a
 failed step.
+
+`xlsx.validate` checks a sheet before a workflow acts on it. `with` fields:
+`path`, `sheet`, `range`, `header`, `columns`, `trim`, and the rules
+`required` (columns the header row must have), `not_blank` (columns no row may
+leave empty), `unique` (columns whose values may not repeat), `types`
+(`{Amount: number}`), and `allowed` (`{Status: [Open, Done]}`); at least one
+rule is needed. It publishes `ok`, `problems` (each with `code`:
+`missing_column`, `blank`, `type`, `duplicate`, or `not_allowed`; `sheet`,
+`cell`, `row`, `column`, `message`), `count`, `rows`, `headers`, `sheet`,
+`range`, `warnings`, and `truncated`, and lists each problem on stderr. By
+default the step succeeds with the problems published (`on_problem: warn`);
+`on_problem: fail` fails it after listing them, and a failed step publishes
+nothing. To stop and ask someone, follow it with a `human.task` step whose
+precondition is `${steps.<id>.outputs.count}` with `expected: "num:>0"` and
+`continue_on: {skipped: true}`, so a clean workbook skips the task and the
+run goes on.
+
+`xlsx.write_cells` fills a template: `cells` maps addresses (`B2`,
+`Sheet1!B2`, `'My Sheet'!B2`, or a defined name for one cell) to a value, to
+`{value: v, type: t}` to pin the type, to `{formula: "=SUM(B2:B9)"}`, or to
+`null` to empty the cell. Every cell keeps its style, and a date written into
+a plain cell gains a date format. `output` writes the result to a new
+workbook and leaves `path` untouched, so one template serves many fills; the
+workbook at `path` must exist. `changes.cells_changed` counts cells that
+really changed. `dry_run`, `atomic`, `wait_for_unlock`, and `artifact` apply.
+
+`xlsx.sheet` takes `operation` (`add`, `copy`, `rename`, `delete`), `sheet`
+(the new sheet for `add`, the source for `copy`, the sheet to rename or
+delete otherwise), `to` (the new name for `copy` and `rename`), `if_exists`
+(`fail`, `skip`, or `replace` when the sheet to create exists), `missing`
+(`fail` or `skip` when the source is absent), and `position` (1-based; by
+default an added sheet goes last and a copy right after its source). It
+publishes the writer outputs plus `sheets`, the names afterwards. Rerun
+safety comes from `if_exists: skip`. A rename does not rewrite formulas on
+other sheets, a delete leaves references to the sheet dangling, and a copy
+does not carry tables, images, or charts.
+
+`xlsx.convert` exports a sheet: `path`, `output` (the file; `.csv`, `.json`,
+`.jsonl`, or `format`), the read options `sheet`, `range`, `header`,
+`columns`, `types`, `trim`, and for csv `encoding` (`utf-8`, `utf-8-bom`,
+`shift_jis`; `cp932` is accepted) and `delimiter`. Every row is written, with
+no cap; `_row` is not. It publishes `path`, `format`, `count`, `sheet`,
+`range`, `warnings`, and with `artifact: true` the file's copy. The reverse
+direction is `xlsx.write` with `input`, whose csv also takes `encoding` and
+`delimiter`.
+
+`dagu dry` warns, without failing, when an xlsx step's workbook, sheet, or a
+column it names does not exist, or when the `input` file of a write is
+missing; fields still holding a step-output reference are skipped.
+
 
 ## archive.create / archive.extract / archive.list
 

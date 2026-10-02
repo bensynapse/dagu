@@ -214,6 +214,10 @@ Current builtin actions:
 | `xlsx.info`, `xlsx.list_sheets` | Workbook metadata | `path`, optional `password` |
 | `xlsx.write`, `xlsx.append` | Workbook writing | `path`, `rows` or `input` |
 | `xlsx.update_rows` | Workbook row updates | `path`, `rows`, `key`, optional `set` and `missing` |
+| `xlsx.validate` | Workbook checks | `path`, at least one of `required`, `not_blank`, `unique`, `types`, `allowed`; optional `on_problem`, `max_problems` |
+| `xlsx.write_cells` | Template filling | `path`, `cells`, optional `output`, `sheet` |
+| `xlsx.sheet` | Sheet management | `path`, `operation`, `sheet`, optional `to`, `if_exists`, `missing`, `position` |
+| `xlsx.convert` | Workbook export | `path`, `output`, optional `format`, `encoding`, `delimiter` |
 | `archive.create`, `archive.extract`, `archive.list` | Archive operations | archive config |
 | `file.stat`, `file.read`, `file.write`, `file.copy`, `file.move`, `file.delete`, `file.mkdir`, `file.list` | File operations | path/source/destination/content config |
 | `git.checkout` | Git repository checkout | `repository`, `path`, optional `ref`, `depth`, auth config |
