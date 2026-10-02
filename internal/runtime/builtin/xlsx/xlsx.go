@@ -27,6 +27,10 @@ const (
 	opWrite      = "write"
 	opAppend     = "append"
 	opUpdateRows = "update_rows"
+	opValidate   = "validate"
+	opWriteCells = "write_cells"
+	opSheet      = "sheet"
+	opConvert    = "convert"
 )
 
 const (
@@ -54,9 +58,9 @@ func newExecutor(ctx context.Context, step ir.Step) (executor.Executor, error) {
 		return nil, err
 	}
 	switch op {
-	case opRead, opInfo, opListSheets:
+	case opRead, opInfo, opListSheets, opValidate:
 		return newReadExecutor(env, op, path, cfg), nil
-	case opWrite, opAppend, opUpdateRows:
+	case opWrite, opAppend, opUpdateRows, opWriteCells, opSheet, opConvert:
 		return newWriteExecutor(env, op, path, cfg)
 	default:
 		return nil, fmt.Errorf("%w: unsupported operation %q", errConfig, op)

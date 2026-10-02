@@ -71,6 +71,43 @@ steps:
       set: {Status: status, Reviewed: {value: "yes"}}
       missing: skip
       wait_for_unlock: 5m
+  - id: check
+    action: xlsx.validate
+    with:
+      path: orders.xlsx
+      sheet: Orders
+      required: [Invoice No, Amount]
+      not_blank: Status
+      unique: [Invoice No]
+      types: {Amount: number}
+      allowed: {Status: [Open, Done]}
+      on_problem: fail
+      max_problems: 50
+  - id: fill
+    action: xlsx.write_cells
+    with:
+      path: template.xlsx
+      output: invoice.xlsx
+      cells: {B2: Acme, D7: "2026-10-01", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: "007", type: string}}
+      dry_run: false
+  - id: month
+    action: xlsx.sheet
+    with:
+      path: report.xlsx
+      operation: copy
+      sheet: Template
+      to: October
+      if_exists: skip
+      missing: fail
+      position: 2
+  - id: export
+    action: xlsx.convert
+    with:
+      path: orders.xlsx
+      output: orders.csv
+      format: csv
+      encoding: shift_jis
+      delimiter: ";"
 `
 	resolved := mustResolveDAGSchema(t)
 	require.NoError(t, resolved.Validate(mustParseYAMLDocument(t, source)))
@@ -96,6 +133,21 @@ steps:
 		{"update_rows without key", "      key: Invoice No\n", ""},
 		{"update_rows without rows", "      rows: ${steps.each.outputs.results}\n", ""},
 		{"append without rows or input", "      input: rows.csv\n      format: csv\n", ""},
+		{"bad on_problem", "on_problem: fail", "on_problem: pause"},
+		{"max_problems below one", "max_problems: 50", "max_problems: 0"},
+		{"allowed value not a list", "allowed: {Status: [Open, Done]}", "allowed: {Status: Open}"},
+		{"validate without rules", "      required: [Invoice No, Amount]\n      not_blank: Status\n      unique: [Invoice No]\n      types: {Amount: number}\n      allowed: {Status: [Open, Done]}\n", ""},
+		{"cells not an object", "cells: {B2: Acme, D7: \"2026-10-01\", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: \"007\", type: string}}", "cells: [B2]"},
+		{"cell formula with a value", "Total: {formula: SUM(E2:E9)}", "Total: {formula: 1, value: 2}"},
+		{"cell with unknown key", "G1: {value: \"007\", type: string}", "G1: {value: \"007\", bold: true}"},
+		{"write_cells without cells", "      cells: {B2: Acme, D7: \"2026-10-01\", E9: 3, F1: null, Total: {formula: SUM(E2:E9)}, G1: {value: \"007\", type: string}}\n", ""},
+		{"bad operation", "operation: copy", "operation: move"},
+		{"bad if_exists", "if_exists: skip", "if_exists: overwrite"},
+		{"position zero", "position: 2", "position: 0"},
+		{"sheet without operation", "      operation: copy\n", ""},
+		{"convert without output", "      output: orders.csv\n", ""},
+		{"bad encoding", "encoding: shift_jis", "encoding: latin1"},
+		{"delimiter too long", "delimiter: \";\"", "delimiter: \";;\""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Contains(t, source, tc.from)

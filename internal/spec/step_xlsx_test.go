@@ -57,12 +57,42 @@ steps:
       rows: ${steps.each.outputs.results}
       set: {Status: status}
       missing: skip
+  - id: check
+    action: xlsx.validate
+    with:
+      path: orders.xlsx
+      required: [Invoice No]
+      on_problem: fail
+  - id: fill
+    action: xlsx.write_cells
+    with:
+      path: template.xlsx
+      output: invoice.xlsx
+      cells: {B2: Acme, Total: {formula: SUM(E2:E9)}}
+  - id: month
+    action: xlsx.sheet
+    with:
+      path: report.xlsx
+      operation: copy
+      sheet: Template
+      to: ${params.MONTH}
+  - id: export
+    action: xlsx.convert
+    with:
+      path: orders.xlsx
+      output: orders.csv
+      encoding: cp932
 `))
 	require.NoError(t, err)
-	require.Len(t, dag.Steps, 6)
+	require.Len(t, dag.Steps, 10)
 	assert.Equal(t, "write", dag.Steps[3].Commands[0].Command)
 	assert.Equal(t, "append", dag.Steps[4].Commands[0].Command)
 	assert.Equal(t, "update_rows", dag.Steps[5].Commands[0].Command)
+	assert.Equal(t, "validate", dag.Steps[6].Commands[0].Command)
+	assert.Equal(t, "write_cells", dag.Steps[7].Commands[0].Command)
+	assert.Equal(t, "sheet", dag.Steps[8].Commands[0].Command)
+	assert.Equal(t, "convert", dag.Steps[9].Commands[0].Command)
+	assert.Equal(t, "invoice.xlsx", dag.Steps[7].ExecutorConfig.Config["output"])
 
 	read := dag.Steps[0]
 	assert.Equal(t, "xlsx", read.ExecutorConfig.Type)
@@ -148,6 +178,26 @@ func TestXlsxReadActionsRejectInvalidConfig(t *testing.T) {
 			name: "read field on info",
 			yaml: "steps:\n  - action: xlsx.info\n    with:\n      path: a.xlsx\n      range: A1:B2\n",
 			want: "with.range is not valid for xlsx.info",
+		},
+		{
+			name: "validate without rules",
+			yaml: "steps:\n  - action: xlsx.validate\n    with:\n      path: a.xlsx\n",
+			want: "validate requires at least one of with.required, with.not_blank, with.unique, with.types, or with.allowed",
+		},
+		{
+			name: "sheet with unknown operation",
+			yaml: "steps:\n  - action: xlsx.sheet\n    with:\n      path: a.xlsx\n      operation: move\n      sheet: A\n",
+			want: "move does not equal any of: [add copy rename delete]",
+		},
+		{
+			name: "write_cells without cells",
+			yaml: "steps:\n  - action: xlsx.write_cells\n    with:\n      path: a.xlsx\n",
+			want: "write_cells requires with.cells",
+		},
+		{
+			name: "convert without output",
+			yaml: "steps:\n  - action: xlsx.convert\n    with:\n      path: a.xlsx\n",
+			want: "convert requires with.output",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

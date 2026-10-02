@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // CellValue is what one cell of a WriteCells request receives: a value,
@@ -55,6 +56,9 @@ func parseCellValue(spec any) (CellValue, error) {
 		return CellValue{Clear: true}, nil
 	case string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return CellValue{Value: normalizeScalar(x)}, nil
+	case time.Time:
+		// YAML reads an unquoted date such as 2026-10-01 as a time.
+		return CellValue{Value: x}, nil
 	case map[string]any:
 		if formula, ok := x["formula"]; ok {
 			text, isText := formula.(string)
