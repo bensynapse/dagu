@@ -97,7 +97,7 @@ func TestInsertedTextStaysLiteral(t *testing.T) {
 	dagu := harness.NewRunner(t)
 	result := dagu.Run("start", "insertion_literal_text.yaml")
 	result.ExpectExitCode(0)
-	dagu.ExpectFileContent("insertion.txt", "p\\$INSERTED\n$INSERTED/data\n$INSERTED/data\nexpanded\n")
+	dagu.ExpectFileContent("insertion.txt", "p\\$INSERTED\n$INSERTED/data\n$INSERTED/data\nexpanded\nexpanded$INSERTED/data\n")
 }
 
 // TestDefectAndRuntimeOnlyNoticeClassification proves the two notice classes

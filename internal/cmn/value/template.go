@@ -111,7 +111,8 @@ func resolveBindings(
 			allReplacements = append(allReplacements, placeholder, token)
 			return placeholder, nil
 		}
-		placeholder := uniqueToken(seed, "__DAGU_RESOLVED_REF__")
+		// A leading non-identifier rune keeps an adjacent $NAME from absorbing the placeholder.
+		placeholder := uniqueToken(seed, "\uE000DAGU_RESOLVED_REF_")
 		seed += placeholder
 		text := formatBindingValue(value)
 		allReplacements = append(allReplacements, placeholder, text)

@@ -102,15 +102,15 @@ func TestResolverExpandsAuthoredText(t *testing.T) {
 	t.Parallel()
 
 	resolver := value.NewResolver(value.StaticScope{}, value.RuntimeScope{
-		Params: value.Values{"text": `p\$INSERTED`},
+		Params: value.Values{"text": `p\$INSERTED`, "path": "/data"},
 		Env:    testEnvScope(map[string]string{"INSERTED": "expanded"}),
 	})
 	got, err := resolver.Object(context.Background(), map[string]any{
-		"nested": []any{"${params.text}:$INSERTED", `\$INSERTED`},
+		"nested": []any{"${params.text}:$INSERTED", `\$INSERTED`, "$INSERTED${params.path}"},
 	}, value.ExecutorConfigField("steps[0].with"))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{
-		"nested": []any{`p\$INSERTED:expanded`, "$INSERTED"},
+		"nested": []any{`p\$INSERTED:expanded`, "$INSERTED", "expanded/data"},
 	}, got)
 }
 
