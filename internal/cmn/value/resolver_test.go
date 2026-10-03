@@ -114,6 +114,19 @@ func TestResolverExpandsAuthoredText(t *testing.T) {
 	}, got)
 }
 
+// Completion runs over a value that loading already resolved, so escapes stay as
+// loading left them while names in the given scope still expand.
+func TestResolverDAGEnvCompletion(t *testing.T) {
+	t.Parallel()
+
+	resolver := value.NewResolver(value.StaticScope{}, value.RuntimeScope{
+		Env: testEnvScope(map[string]string{"RUN": "run-1"}),
+	})
+	got, err := resolver.String(context.Background(), `p\$RUN:$RUN`, value.DAGEnvCompletionField("env.COPY"))
+	require.NoError(t, err)
+	assert.Equal(t, `p\$RUN:run-1`, got)
+}
+
 func TestResolverInsertionInDynamicFields(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
