@@ -104,21 +104,26 @@ func resolveBindings(
 	notices ValueReferenceNoticeSink,
 ) (string, protectedReferences, error) {
 	var all, toCommand, fromCommand []string
-	// Tokens come from one process-wide counter, so they only need to differ from input.
+	// Tokens come from one process-wide counter and all contain "DAGU_", so they
+	// only need checking against input that contains it.
+	taken := input
+	if !strings.Contains(input, "DAGU_") {
+		taken = ""
+	}
 	// A leading non-identifier rune keeps an adjacent $NAME from absorbing a placeholder.
 	resolved, err := walkBindings(input, func(token string, path string) (string, error) {
 		value, err := bindingValue(ctx, path, scope, true)
 		if err != nil {
 			addUnresolvedReferenceNotice(notices, field, token, err)
-			placeholder := uniqueToken(input, "\uE000DAGU_UNRESOLVED_REF_")
+			placeholder := uniqueToken(taken, "\uE000DAGU_UNRESOLVED_REF_")
 			// Shells get an ASCII token because Windows substitution output may not keep other runes.
-			commandToken := uniqueToken(input, "__DAGU_UNRESOLVED_REF__")
+			commandToken := uniqueToken(taken, "__DAGU_UNRESOLVED_REF__")
 			all = append(all, placeholder, token)
 			toCommand = append(toCommand, placeholder, commandToken)
 			fromCommand = append(fromCommand, commandToken, placeholder)
 			return placeholder, nil
 		}
-		placeholder := uniqueToken(input, "\uE000DAGU_RESOLVED_REF_")
+		placeholder := uniqueToken(taken, "\uE000DAGU_RESOLVED_REF_")
 		text := formatBindingValue(value)
 		all = append(all, placeholder, text)
 		toCommand = append(toCommand, placeholder, text)
