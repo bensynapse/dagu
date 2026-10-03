@@ -613,7 +613,7 @@ Dagu includes built-in actions that run within the Dagu process or on the select
 | `wait.duration` / `wait.until` / `wait.file` / `wait.http` | Wait for time, file state, or HTTP readiness |
 | `human.task` | Wait for acknowledgement or typed operator input before downstream steps continue |
 | `mail.send` | Send email via SMTP |
-| `mail.search` | Find email in an IMAP mailbox |
+| `mail.search` | Find email in an IMAP or Gmail mailbox |
 | `mail.organize` | Mark, move, archive, or trash email |
 | `xlsx.read` / `xlsx.info` / `xlsx.list_sheets` | Read typed rows and describe `.xlsx` workbooks without a spreadsheet application |
 | `xlsx.write` / `xlsx.append` / `xlsx.update_rows` | Write reports, append rows, and write per-row results back into a workbook |
@@ -831,7 +831,7 @@ See the [distributed execution documentation](https://docs.dagu.sh/server-admin/
 | `dagu cleanup <dag>` | Clean up old run data |
 | `dagu version` | Show version |
 
-The table lists the most common commands. The binary ships 31 in total, including `exec`, `ls`, `ps`, `rm`, `sync`, `schema`, `example`, `config`, `profile`, `context`, `license`, `upgrade`, and `completion`; run `dagu --help` or see the [CLI reference](https://docs.dagu.sh/getting-started/cli) for all of them.
+The table lists the most common commands. The binary ships 36 in total, including `exec`, `ls`, `ps`, `rm`, `prune-artifacts`, `sync`, `schema`, `example`, `config`, `profile`, `context`, `license`, `upgrade`, and `completion`; run `dagu --help` or see the [CLI reference](https://docs.dagu.sh/getting-started/cli) for all of them.
 
 ## Environment Variables
 
