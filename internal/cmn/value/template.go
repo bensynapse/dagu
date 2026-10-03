@@ -101,19 +101,17 @@ func resolveBindings(
 	notices ValueReferenceNoticeSink,
 ) (string, protectedReferences, error) {
 	var allReplacements, resolvedReplacements []string
-	seed := input
+	// Tokens come from one process-wide counter, so they only need to differ from input.
 	resolved, err := walkBindings(input, func(token string, path string) (string, error) {
 		value, err := bindingValue(ctx, path, scope, true)
 		if err != nil {
 			addUnresolvedReferenceNotice(notices, field, token, err)
-			placeholder := uniqueToken(seed, "__DAGU_UNRESOLVED_REF__")
-			seed += placeholder
+			placeholder := uniqueToken(input, "__DAGU_UNRESOLVED_REF__")
 			allReplacements = append(allReplacements, placeholder, token)
 			return placeholder, nil
 		}
 		// A leading non-identifier rune keeps an adjacent $NAME from absorbing the placeholder.
-		placeholder := uniqueToken(seed, "\uE000DAGU_RESOLVED_REF_")
-		seed += placeholder
+		placeholder := uniqueToken(input, "\uE000DAGU_RESOLVED_REF_")
 		text := formatBindingValue(value)
 		allReplacements = append(allReplacements, placeholder, text)
 		resolvedReplacements = append(resolvedReplacements, placeholder, text)
