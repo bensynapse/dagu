@@ -7,6 +7,10 @@ params:
     default: '$INSERTED/data'
 env:
   INSERTED: expanded
+  ROOT_COPY: ${params.variable}
+  ROOT_ESC: '\$INSERTED'
+  ROOT_ESC_PARAM: ${params.escaped}
+  RUN_COPY: ${params.variable}-${context.run.id}
 working_dir: .
 steps:
   - id: check
@@ -21,3 +25,7 @@ steps:
         ${env.COPY}
         $INSERTED
         $INSERTED${params.variable}
+        ${env.ROOT_COPY}
+        ${env.ROOT_ESC}
+        ${env.ROOT_ESC_PARAM}
+        ${env.RUN_COPY}
