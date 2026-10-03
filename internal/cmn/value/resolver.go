@@ -130,8 +130,8 @@ func (r Resolver) resolveString(ctx context.Context, raw string, field Field) (s
 			}
 			return "", err
 		}
-		if protected.resolved != nil {
-			ctx = context.WithValue(ctx, resolvedReferencesKey{}, protected.resolved)
+		if protected.all != nil {
+			ctx = context.WithValue(ctx, protectedReferencesKey{}, protected)
 		}
 	}
 	evaluated, err := evalString(ctx, resolved, r.optionsFor(policy)...)

@@ -106,11 +106,11 @@ func TestResolverExpandsAuthoredText(t *testing.T) {
 		Env:    testEnvScope(map[string]string{"INSERTED": "expanded"}),
 	})
 	got, err := resolver.Object(context.Background(), map[string]any{
-		"nested": []any{"${params.text}:$INSERTED", `\$INSERTED`, "$INSERTED${params.path}"},
+		"nested": []any{"${params.text}:$INSERTED", `\$INSERTED`, "$INSERTED${params.path}", "$INSERTED${env.MISSING}"},
 	}, value.ExecutorConfigField("steps[0].with"))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{
-		"nested": []any{`p\$INSERTED:expanded`, "$INSERTED", "expanded/data"},
+		"nested": []any{`p\$INSERTED:expanded`, "$INSERTED", "expanded/data", "expanded${env.MISSING}"},
 	}, got)
 }
 

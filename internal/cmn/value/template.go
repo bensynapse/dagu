@@ -86,11 +86,14 @@ var legacyBuiltinContextAliasesByCanonical = func() map[string]string {
 
 type template struct{ source string }
 
-type resolvedReferencesKey struct{}
+type protectedReferencesKey struct{}
 
+// protectedReferences maps the placeholders that stand in for references while
+// a field is evaluated.
 type protectedReferences struct {
-	all      *strings.Replacer
-	resolved *strings.Replacer
+	all         *strings.Replacer // placeholder to inserted text or original reference
+	toCommand   *strings.Replacer // placeholder to the text a substituted command receives
+	fromCommand *strings.Replacer // command token back to its unresolved placeholder
 }
 
 func resolveBindings(
@@ -100,26 +103,31 @@ func resolveBindings(
 	field string,
 	notices ValueReferenceNoticeSink,
 ) (string, protectedReferences, error) {
-	var allReplacements, resolvedReplacements []string
+	var all, toCommand, fromCommand []string
 	// Tokens come from one process-wide counter, so they only need to differ from input.
+	// A leading non-identifier rune keeps an adjacent $NAME from absorbing a placeholder.
 	resolved, err := walkBindings(input, func(token string, path string) (string, error) {
 		value, err := bindingValue(ctx, path, scope, true)
 		if err != nil {
 			addUnresolvedReferenceNotice(notices, field, token, err)
-			placeholder := uniqueToken(input, "__DAGU_UNRESOLVED_REF__")
-			allReplacements = append(allReplacements, placeholder, token)
+			placeholder := uniqueToken(input, "\uE000DAGU_UNRESOLVED_REF_")
+			// Shells get an ASCII token because Windows substitution output may not keep other runes.
+			commandToken := uniqueToken(input, "__DAGU_UNRESOLVED_REF__")
+			all = append(all, placeholder, token)
+			toCommand = append(toCommand, placeholder, commandToken)
+			fromCommand = append(fromCommand, commandToken, placeholder)
 			return placeholder, nil
 		}
-		// A leading non-identifier rune keeps an adjacent $NAME from absorbing the placeholder.
 		placeholder := uniqueToken(input, "\uE000DAGU_RESOLVED_REF_")
 		text := formatBindingValue(value)
-		allReplacements = append(allReplacements, placeholder, text)
-		resolvedReplacements = append(resolvedReplacements, placeholder, text)
+		all = append(all, placeholder, text)
+		toCommand = append(toCommand, placeholder, text)
 		return placeholder, nil
 	})
 	return resolved, protectedReferences{
-		all:      newReferenceReplacer(allReplacements),
-		resolved: newReferenceReplacer(resolvedReplacements),
+		all:         newReferenceReplacer(all),
+		toCommand:   newReferenceReplacer(toCommand),
+		fromCommand: newReferenceReplacer(fromCommand),
 	}, err
 }
 
